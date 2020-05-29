@@ -9,6 +9,7 @@
     <!-- <script type="module"> -->
     <!--   import {CodeJar} from 'https://medv.io/codejar/codejar.js' -->
     <!-- </script> -->
+    <script src="assets/lightrange.js"></script>
     <script src='codejar.js'></script>
     <script src='assets/highlight/highlight.pack.js'></script>
 
@@ -61,11 +62,17 @@
   </head>
   <body>
     <!-- <textarea id="text&#45;field">Hello</textarea> -->
+    <!-- <div id="text&#45;field" contenteditable="true">Hello</div> -->
 
+    <h2> First one. Buggy with codejar.</h2>
+    <div class="parent"><div id="text-field" class="editor language-javascript">function() {
 
-    <div class="parent"><div class="editor language-javascript">function() {
+        }</div></div>
 
-}</code></div>
+    <h2>second one. Highlight JS only...</h2>
+    <!-- <div class="parent"><div id="text&#45;field2" contenteditable="true" class="editor language&#45;javascript"><div>function saveMe() {}</div></div></div> -->
+    <div class="parent"><div id="text-field2" contenteditable="true" class="editor language-javascript">function saveMe(){}</div></div></div>
+
 
 
     <p id="load">Firebase SDK Loading&hellip;</p>
@@ -80,7 +87,75 @@
       }
 
 
-      let jar = CodeJar(document.querySelector('.editor'), highlight)
+      let jar = CodeJar(document.querySelector('#text-field'), highlight)
+
+
+      //
+      // hljs.addPlugin( {
+      //   'after:highlightBlock': ({block, result}) => {
+      //     // move the language from the result into the dataset
+      //     // block.dataset.language = result.language
+      //
+      //     console.log('block', block);
+      //     console.log('result', result);
+      //
+      //     // result.code gives me the src of the code used (input)
+      //     // result.value gives me the output
+      //
+      //   }
+      // })
+
+
+      // BEFORE: do the opposite swap? Is that helpful or needed? Any way we can whitelist chars from the transformation?
+
+      hljs.addPlugin( {
+        'after:highlight': (result) => {
+          console.log('result2', result);
+
+          // cannot use this, beceause this is called BEFORE it replaces the dom
+
+          // if marker exists, and is in the dom
+          // var marker = document.getElementById('caret-marker');
+          // if (marker && marker.parentNode) {
+          //   console.log('will MOVE BACK');
+          //   moveCaret(document.getElementById('caret-marker'),0);
+          // }
+          // result.value =  result.value.replace('[[CARET]]', '<div id="caret-marker"></div>');
+
+          // result.code gives me the src of the code used (input)
+          // result.value gives me the output
+
+        }
+      })
+
+
+
+
+
+        function moveCaret(node, anchorOffset) {
+          console.log('nodeToMoveTo', node)
+
+          var range = document.createRange();
+          var sel = window.getSelection();
+          // range.setStart(el.childNodes[3], 0);
+          range.setStart(node, anchorOffset);
+          // range.setStart(el.childNodes[3], 10);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+
+
+      // second one... Add highlighting. VERY COOL... Can we totally separate the highlighting from the updating to ensure proper separation?
+      // TODO: maybe use <pre> and <code> for that...
+      hljs.configure({useBR: true}); // DIV doesn't preserve linebreaks so we need to add this in...
+      hljs.highlightBlock(document.getElementById('text-field2'));
+
+
+
+
+      // TODO: try out shiku next...
+
     </script>
 
     <script>
@@ -118,23 +193,162 @@ if (!firebase.apps.length) {
       // console.log('HELLLOO')
       // FIXME: I only want to listen to the 1 session from the OTHER person...
       // on DB change, update
-      db.ref("sessions/01").on("value", snapshot => {
+      var editor = document.querySelector('#text-field');
+      db.ref("sessions/01").on("vsssalue", snapshot => {
         let arr = [];
-        console.log('snapshot', snapshot)
+        console.log('##### snapshot', snapshot)
         snapshot.forEach((snap) => {
-          console.log('snap', snap)
+          console.log('#### snap', snap)
           arr.push(snap.val());
+        });
           // TODO: for this we'll need to see WHO made the change during the resolution phase...
           // NAIVE implementation for now...
 
 
+          // HACKY way outisde of the editor... but oh well
+          var pos = window.getSelection(); // get cursor position
+
+
           // document.getElementById('text-field').value = arr[0]
           // jar.updateCode(`let foo = bar`)
-          jar.updateCode(arr[0])
+          var aNode = pos.anchorNode;
+          var aOffset = pos.anchorOffset;
+          var fNode = pos.focusNode;
+          var fOffset = pos.focusOffset;
 
-        });
+          // console.log('window.get', pos.toString())
+          // console.log('pos:before', pos)
+          // jar.updateCode(arr[0]);
 
-        console.log('arr', arr)
+
+        // TODO: Extract this once we having something that is even remotely stable...
+
+        var editor2 = document.querySelector('#text-field2');
+
+        var sp1 = document.createElement("code");
+        var sp2 = editor2.cloneNode()
+
+        // TODO: think about whether I'll need to remove & add the listeners, or if i can just replace the child...
+        // Whole point is... I want to know if I can replace it w/o jacking up the cursors position. test that QUICKLY!!!
+        sp1.id = "text-field2";
+        sp1.className = "editor language-javascript";
+        sp1.contentEditable = "true"; // TODO: change to inherit
+        sp1.innerHTML = editor.innerHTML;
+
+        sp2.innerHTML = arr[0];
+
+        // transform the HTML before it goes into the DOM. NICE!
+        hljs.highlightBlock(sp2);
+        // Q: Can I just clone the existin node? and just replace the innerHTML?
+
+    // <pre class="parent"><code id="text-field2" contenteditable="true" class="editor language-javascript">function saveMe() {}</code></pre>
+        // sp1.outerHTML = "<code id='text-field2' contenteditable='true' class='editor'> testinst arst arst arstrast</code>"
+
+
+        // FIXME: is anchorNode the best node to use?
+        // TODO: abstract this, and move parts of it to the exp page...
+        // OR another page...
+
+        // is this harder or easier than my fancy insertion way? which is more reliable and performant?
+        // TODO: try marker insertion first, and then we can try the other method...
+
+        var selection = window.getSelection();
+        var path = findNodePathFromParent(editor2, selection.anchorNode);
+        var anchorOffset = selection.anchorOffset;
+        console.log('path', path);
+
+
+        // var range = lightrange.saveSelection();
+        // REPLACE the condent with the new content...
+        editor2.parentNode.replaceChild(sp2, editor2);
+
+        var node = findNodeFromPath(sp2, path);
+        // console.log('node', node);
+
+
+        // Q: Could we figure out the position we need to find before we even inject it into the dom, since the html is already set?
+        // FIXME: Maybe we could do some fancy (v)dom diffing here and see what actually changed and try to guess about where the cursor SHOULD be...
+        // TODO: consider writing a fn to determine where the cursor should be... interesting!!!
+
+        // TODO: Can we do this before we inject it into the dom?
+        hljs.highlightBlock(document.getElementById('text-field2'));
+
+        sp2.focus();
+
+        // sp2.children[2].focus()
+
+        editor2 = document.querySelector('#text-field2');
+
+        // INTEERSTING!!!!
+        // If I'm typing on the same node (no spaces) then it's VERY smooth
+        // then this code here works just fine...
+
+        // so the magic is going to be finding the right node... In some cases that will just be the end, or the end of the row...
+
+        // TODO: abstract this to a move(/restore) function, and copy to exp page...
+        // Then maybe make a lib/utils file... or just move it to main for now...
+        var el = editor2
+
+
+
+        function saveCaretPos(){
+
+        }
+
+
+        // sp2.setSelectionRange(102, 104);
+
+        // var range = sp2.createTextRange();
+        // range.collapse(false);
+        // range.select();
+        // sp2.selectionStart = 5;
+
+        // focused = document.hasFocus();
+        // console.log('after:focus', focused);
+        // lightrange.restoreSelection(range);
+
+
+
+        // editor2.innerText= arr[0];
+
+
+        // setTimeout(function() {
+        // },50)
+
+
+        // TODO: TRY this...
+// https://shiki.matsu.io/
+
+
+        // update the 2nd field...
+
+          // editor.innerHTML = (arr[0])
+          // lightrange.restoreSelection(range);
+          // pos.see
+          // pos.setSelectionRange(10, 11);
+// https://developer.mozilla.org/en-US/docs/Web/API/Selection/setBaseAndExtent
+          // console.log('pos:after', pos)
+          // console.log('aOffset', aOffset)
+          // console.log('fOffset', fOffset)
+
+          // TODO: study up on these so I can understand them
+          // pos.setBaseAndExtent(editor, pos.anchorOffset,editor, pos.focusOffset)
+          // focus offset is how many childrn should be selected
+          // setBaseAndExtent(anchorNode,anchorOffset,focusNode,focusOffset)
+          // setTimeout(function() {
+          //   pos.setBaseAndExtent(aNode, aOffset, fNode, fOffset)
+          // },500)
+
+
+          // setTimeout(function() {
+          //   window.getSelection().collapse(document.querySelector('.editor'),2);
+          // }, 50)
+
+
+// https://stackoverflow.com/questions/512528/set-keyboard-caret-position-in-html-textbox
+
+
+        // console.log('arr', arr)
 
       })
 

@@ -1,0 +1,91 @@
+<html>
+<head>
+
+    <!-- <link rel="stylesheet" href="assets/highlight/styles/dracula.css"> -->
+    <!-- <link rel="stylesheet" href="prism.css" /> -->
+    <link rel="stylesheet" href="prism-tomorrow.css" />
+
+
+    <style>
+      .editor{
+          border-radius: 6px;
+          /* box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2); */
+          font-family: 'Source Code Pro', monospace;
+          font-size: 14px;
+          font-weight: 400;
+          height: 340px;
+          letter-spacing: normal;
+          line-height: 20px;
+          tab-size: 4;
+      }
+
+
+      .editor:focus{ outline: none;}
+
+      .parent {
+        box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2);
+        max-width: 700px;
+        margin: 60px auto;
+        /* padding: 10px; */
+      }
+    </style>
+
+    <style>
+      /* Custom font changes */
+code[class*="language-"] {
+  font-size: 14px;
+  font-family: 'Source Code Pro', 'Consolas', Monaco, 'Andale Mono', 'Ubuntu Mono', monospace
+}
+    </style>
+
+
+
+</head>
+<body>
+  <h1> Prism Experiments</h1>
+  <p>Goal: Prove that we can render with Prism, change the markup with contentEditable, re-render with Prism, and <strong>PRESERVE the caret position</strong>.</p>
+  <p>Prism seems to have a flatter structure. If this doesn't work, I'll need to revisit using codeJar, or copying how codeJar solves the thing I cannot seem to solve...</p>
+  <p>For the caret save &amp; restore there are SO many options... The most interesting is a vdom-type approach where we compare the structure and do some partial application and insert the new dom when it has actually changed... I think we can punt this until later though...</p>
+
+  <div class="parent"><pre><code id="editor" class="editor language-javascript" contenteditable="true">function(){<br><br>}</code></pre></div>
+
+
+    <!-- <script src="https://myCDN.com/prism@v1.x/components/prism&#45;core.min.js"></script> -->
+    <!-- <script src="https://myCDN.com/prism@v1.x/plugins/autoloader/prism&#45;autoloader.min.js"></script> -->
+
+    <!-- TODO: load this via Parcel... -->
+    <script src="./index.js"></script>
+
+
+    <h2>Experiments to try</h2>
+    <ul>
+      <li>Go all in on line & char number</li>
+      <li>Consider splitting formatting by line</li>
+      <li>Try the line by line thing with highlight js... (and just go up and down the tree)</li>
+      <li>Try capturing the keyboard input, and then rendering the output of it</li>
+      <li>Try using the lowest level fn for prism and make my own wrapper editor around it... (similar to codejar...) <br/>
+        `Prism.highlight("function(){}", Prism.languages.javascript, "javascript");` WOW </li>
+    </ul>
+
+    <h2>If I can't get this by EOD, bail on my own and use codemirror and get it working with distirbuted syncing... </h2>
+
+    <h2> LEARNINGS:</h2>
+    <ul>
+      <li> You have to get the textNODE and set the selector on that! (set the cursor on that, instead of on the span parent)</li>
+      <li>I kind of like writing down my thoughts here in the html. Very organized very nice to come back to later. Markdown could work. But I love having it co-located with the exp code...</li>
+      <li>I think we'll need to go with the 1-div-per-row approach, and just use the prism low level engine to parse it myself...</li>
+      <li>Relevant reading from prism issues: https://github.com/PrismJS/prism/issues/1764 on linebreaks.</li>
+    </ul>
+
+    <h2> Annoying bugs to fix next:</h2>
+    <ul>
+      <li> hard to select line if there's no text on it (maybe ensure every line has at least 1 char...)?</li>
+      <li> hard to select line if there's no text on it</li>
+      <li> Add some textmate style sugar: enter on brackents, adds line, indents you to where you want to be...
+      <li>Add tab support</li>
+    </ul>
+
+
+
+  </body>
+</html>

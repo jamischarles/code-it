@@ -1,0 +1,192 @@
+<body>
+  <h1>🥕Caret related experiments...</h1>
+
+  TODO: Test this page in safari, FF, Chrome...
+  This will help verify that the base pieces and assumptions work across browsers.
+  Learning:
+  - Testing this way is really helpful for complex things where I don't know a lot about how it interacts with the env.
+  - Love all the localized code. Keep the JS with the snippet and the piece where it's used...
+
+
+  <h2>1) WORKING: Get node from char count only with 2 same text trees but different node trees (see console)</h2>
+    <div id="node-a">Some men just want to watch the world burn. A ma|n's body may grow old, but inside his spirit can still be as young and as restless as ever.</div>
+
+    <div id="node-b">Some men just want to <span>watch</span> the world burn. A <span style="background-color: #eee;">ma|n's</span> body may grow old, but inside his spirit can still be as young and as restless as ever.</div>
+    <script>
+      // Q: Do we have to worry about nested nodes? for now let's just assume just 1 level deep...
+      // 46 is where the CURSOR is... (based on the textContent)
+
+
+
+      // Next question to answer... Can we even translate the current cursor selection based on the root node?
+      // YES. This works
+      // If we can't we'll have to revisit this whole thing...
+      function findNodeFromCharPos(node, pos) {
+        var runningCounter = 0;
+
+        // Learning: only textNodes or .textContent gives you length... (maybe inputs too, but we aren't using  those here)
+
+
+        // iterate through all the childnodes
+        var nodes = node.childNodes
+
+        for(var i=0; i<node.childNodes.length; i++) {
+          var curNode = node.childNodes[i];
+
+          // we have found the node we are looking for...
+          if (runningCounter + curNode.textContent.length > pos) {
+            return curNode;
+          }
+
+          runningCounter += curNode.textContent.length;
+        }
+
+
+        // when we find it, target the child with the closest range target...
+
+
+      }
+
+      var result = findNodeFromCharPos(document.getElementById('node-b'), 48);
+      console.log('exp 1) result', result)
+
+
+    </script>
+
+
+  <h2>2) Exp: Can we get different nodes based on parent, or does it have to localized to child? A: Must be localized to child. Delete?</h2>
+  <p>TODO: Add more context here...</p>
+    <div id="node-a" contentEditable="true" style="border: 1px solid #eee;">Some men just want to watch the world burn. A ma|n's body may grow old, but inside his spirit can still be as young and as restless as ever.</div>
+
+    <div id="node-b" contentEditable="true" style="border: 1px solid #eee;">Some men just want to <span>watch</span> the world burn. A <span style="background-color: #eee;">ma|n's</span> body may grow old, but inside his spirit can still be as young and as restless as ever.</div>
+
+    <script>
+      // I can use the global selection listener I use lower to test this...
+    </script>
+
+
+  <h2>3) Exp: Can we use a node as a marker to save/restore caret position easily?</h2>
+  <h3>3a) Q: Can we insert a node marker where the caret is? A: YES. Worked beautifully.</h2>
+  <p>Goal: Basically we want a span to follow the caret around...</p>
+  <p>Result: This worked MUCH better than I expected. When we add | as text it works still but bumps text. When we make it absolute it fixes bump, but causse other weird behavior. For now let's keep it simple... No text content... </p>
+  <p>Considerations. Be careful with the listener. Check on how it affects perf. We could debounce it. Maye we don't need it when we simply move caret. This only really matters when we change input. AND it really only matters for BEFORE we we tokenize the code block. </p>
+  <p> `caret-color: transparent;` Worked to hide the caret color. NICE!
+  <div id="exp3a" contenteditable="true" style="border: 3px solid #666; caret-color: red;"> Some men just want to watch the world burn. A ma|n's body may grow old, but inside his spirit can still be as young and as restless as ever.  </div>
+
+  <script>
+    // this is a GLOBAL handler. Best we can do to isolate is to use evt delegation inside to check what nodes are affected or focused to see if we want to take action... that could be part of the debounce check...
+    document.addEventListener('selectionchange', () => {
+  // debugger;
+      var selection = document.getSelection()
+      console.log('CARRET MOVED!',selection);
+
+      insertMarker(selection.anchorNode, selection.anchorOffset);
+});
+
+
+    // is marker live in dom yet?
+    var marker = false;
+
+    // Q: Can you even append it at a position? What if it's just a bunch of wihtespace? Just split the the textnode
+    // Q: Can you innject a node in the middle of a textnode? YES.
+    // TODO: Try to debounce this or reduce the frequency of updating the dom... Reflows and all...
+    function insertMarker(node, splitOffset) {
+
+      // FIXME:
+      // BUGS:
+      // - deletion with backspace breaks this... Need to guard against that...
+
+
+
+      if (marker) marker = marker.parentNode.removeChild(marker);
+
+      // will this always be a text node?
+      // split the text node into 2 nodes (perfect for insertions)
+      // offset = where to split the textNode
+      var split = node.splitText(splitOffset); // returns a node where the split happened
+
+
+
+      // if (!marker) {
+        marker = document.createElement('span');
+        marker.id = 'caret-marker';
+      // interesting that changing pos to absolute introduces a bunch of other problems...
+      // Exp for later: see if we can replace the cursor with our own custom one entirely...
+        // marker.innerHTML = '|';
+      // Weird that changing position affects if I can move to the right...
+        // marker.style="position: absolute; color: red;"
+        marker.style="display:none;" // TODO: need to measure, but I THINK this improves the perf...
+      // }
+
+      // FIXME: add fix for case when you go from moving left, to moving right... At that point there's a error because we don't want to move
+      // add some sort of check there...
+
+      // skip the marker OR we could just remove it first...
+      console.log('split', split);
+      console.log('split-name', split.nodeName);
+      console.log('is stame', split.parentNode);
+      // when you are moving from left, to swtich to moving to right, it tries to replace the marker with itself. In this case, move to next el.
+      // other fix would be to simply remove the caret marker from dom first...
+      if (split.parentNode.id === 'caret-marker') {
+        node.parentNode.appendChild(marker, split);
+        // split = split.parentNode.nextSibling; //
+      } else {
+        node.parentNode.insertBefore(marker, split);
+      }
+
+      console.log('split2', split);
+
+      // FIXME: should  we collapse the text nodes after we  move it?
+      // https://developer.mozilla.org/en-US/docs/Web/API/Text/splitText
+
+      // if we use a live node, it'll auto remove it from other spot...
+
+      // if I move right, should I insetrAfter?
+
+      // glue the split nodes back together.
+      node.parentNode.normalize();
+    }
+  </script>
+
+
+
+  <h3>3b) Q: Can we use this marker to jump to the cursor easily? A: WOW. IT WORKED!!!!</h2>
+  <p>Summary. While this worked beautifully in this standalone example, this technique breaks syntax highlighting because it interferes with the regex rules that tokenize the keywords. Let's shelve this technique for now...</p>
+  <p>Goal1: Prove that we can use the marker node to jump to the cursor easily to that spot... YES.</p>
+  <p>Goal2: Prove that this will work after wiping out the node with innerHTML. YES.</p>
+  <div id="exp3b" contenteditable="true" style="border: 3px solid #666;"> Some men just want to watch the world burn. A ma|n's body may grow old, but inside his spirit can still be as young and as restless as ever.  </div>
+  <script>
+    document.getElementById('exp3b').addEventListener('keyup', function(e) {
+      var el = e.target;
+
+      console.log('elContent', el.innerHTML);
+      // this repros the issue well...
+      // PROVEN: innerHTML moves caret to beginning of the el
+      el.innerHTML += "FOR";
+
+      // Try #1: focus. Does NOT work for moving the caret.
+      // document.getElementById('caret-marker').focus()
+
+      // Try #2: Restore focus to the caret-marker node...
+        var marker = document.getElementById('caret-marker');
+        var range = document.createRange();
+        var sel = window.getSelection();
+        // range.setStart(el.childNodes[3], 0);
+        range.setStart(marker, 0);
+        // range.setStart(el.childNodes[3], 10);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+    })
+
+  </script>
+
+
+  <h2>4) Q: Can I use the marker node to survive the transformation that highlight JS performs? ie: changes the tree...</h2>
+  Q: Will this require extending highlight.js? Or adding a plugin? Or modifying it somehow so it won't display the node...? We basically need something it'll inject but won't display...
+
+  <div id="exp4" contenteditable="true" style="border: 3px solid #666;"> Some men just want to watch the world burn. A ma|n's body may grow old, but inside his spirit can still be as young and as restless as ever.  </div>
+  <script></script>
+
+  </body>
