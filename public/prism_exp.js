@@ -52,6 +52,8 @@ export function restoreCaretPos(editorNode, posObject) {
   // var node = posObject.node;
   // var anchorOffset = posObject.offset;
 
+  // if editor empty or at beginning go back to very beginning
+
   // Approach #1: Find node based on char position that was saved earlier...
   var {node, offset} = findNodeFromCharPos(editorNode, posObject.charPosition);
 
@@ -108,7 +110,7 @@ function findNodeFromCharPos(parentNode, pos) {
       if (curNode.nodeType === Node.TEXT_NODE) {
         // give us the node and the position the cursor needs to be on the node
         // Since we're at the textnode we don't need to subtract the running counter anymore...
-        debugger;
+        // debugger;
         return {node: curNode, offset: pos - runningCounter};
       }
 
