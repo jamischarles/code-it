@@ -4,7 +4,9 @@
   "description": "Collab code editing",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy":
+      "parcel build public/working.html && env NODE_TLS_REJECT_UNAUTHORIZED=0 firebase deploy"
   },
   "author": "Jamis Charles",
   "license": "ISC",

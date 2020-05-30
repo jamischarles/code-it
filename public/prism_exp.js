@@ -1,4 +1,41 @@
-console.log('LOADED');
+import Prism from 'prismjs';
+
+var editor = document.getElementById('editor');
+
+// should we update the innerHTML? If yes, update it, and save/restore caret.
+export function updateEditorWithNewCode(newRawCode) {
+  // current tokenized code
+  var oldCode = editor.innerHTML;
+
+  // tokenize the new code so we can diff it.
+  var newCode = Prism.highlight(
+    newRawCode,
+    Prism.languages.javascript,
+    'javascript',
+  );
+
+  // console.log('oldCode', oldCode);
+  // console.log('newCode', newCode);
+
+  if (oldCode !== newCode) {
+    console.log('Code changed remotely. Update editor');
+    setEditorCode(editor, newCode);
+  } else {
+    console.log('Code has NOT changed remotely. NO updates.');
+  }
+}
+
+// TODO: Add support for 1 line at a time eventually
+export function getEditorCode(editor) {
+  return editor.textContent; // ignore all the html. Just the textNodes.
+}
+
+// FIXME: should I save and restore caret in here?
+// FIXME: should I diff in here?
+function setEditorCode(editor, newContent) {
+  editor.innerHTML = newContent;
+  // return editor.textContent; // ignore all the html. Just the textNodes.
+}
 
 // FIXME: Add some unit  test around this...
 export function saveCaretPos(editorNode) {

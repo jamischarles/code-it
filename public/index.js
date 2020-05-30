@@ -1,5 +1,6 @@
 import Prism from 'prismjs';
-import {saveCaretPos, restoreCaretPos} from './prism_exp';
+import {saveCaretPos, restoreCaretPos, getEditorCode} from './prism_exp';
+import './listeners'; // intiialize the listeners... FIXME: Make this explicit, or add it on page, or something...
 
 // var Normalizer = require('prismjs/plugins/normalize-whitespace/prism-normalize-whitespace');
 // // Create a new Normalizer object
@@ -20,11 +21,19 @@ import {saveCaretPos, restoreCaretPos} from './prism_exp';
 
 var editor = document.getElementById('editor');
 
+// tab key must be handled by keyDown, because focus switch happens before keyUp happens)
+editor.addEventListener('keydown', function(e) {
+  var TABKEY = 9;
+  var key = e.keyCode;
+  if (key === TABKEY) handleTab(e);
+});
+
 // TODO next: just debounce this when you've stopped typing...
 // Q: keyup vs keydown?
 // keydown seems faster... less delay NICE.
 // and TAB only works on keydown
-editor.addEventListener('keydown', function(e) {
+// if we use keydown, we run the code before the new key is added... Let's use keyup for now...
+editor.addEventListener('keyup', function(e) {
   console.log('e key up', e);
   var key = e.keyCode;
   // if arrow keys, don't re-format
@@ -36,20 +45,33 @@ editor.addEventListener('keydown', function(e) {
     key === 39 ||
     key === 40 ||
     key === 16 ||
-    e.metaKey
-  )
+    key === 0 || // backspace
+    key === 91 || // cmd key
+    e.metaKey // does this even help?
+  ) {
     return;
+  }
 
   // TODO Make this switch statement
-  var TABKEY = 9;
-  if (key === TABKEY) handleTab(e);
-
   var pos = saveCaretPos(document.getElementById('editor'));
   Prism.highlightElement(editor, false, function() {
     console.log('done', arguments);
     console.log('pos', pos);
     restoreCaretPos(document.getElementById('editor'), pos);
   });
+
+  // TODO: extract this...
+  // Push to FB
+  var currentSessionKey = '01';
+
+  var updates = {};
+  updates[`/sessions/${currentSessionKey}/content`] = getEditorCode(editor);
+
+  // TODO: we must debounce these update DB writes somehow... Though websockets makes the network penalty much less looks like...
+  firebase
+    .database()
+    .ref()
+    .update(updates);
 });
 
 // listen for special keys...
