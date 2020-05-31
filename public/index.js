@@ -62,7 +62,9 @@ editor.addEventListener('keyup', function(e) {
 
   // TODO: extract this...
   // Push to FB
-  var currentSessionKey = '01';
+  // var currentSessionKey = '01';
+  // FIXME: store this in localstorage or in global window?
+  var currentSessionKey = window.location.hash.replace('#', '');
 
   var updates = {};
   updates[`/sessions/${currentSessionKey}/content`] = getEditorCode(editor);

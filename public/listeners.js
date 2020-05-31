@@ -18,10 +18,27 @@ document.addEventListener('DOMContentLoaded', function() {
   if (!firebase.apps.length) {
     firebase.initializeApp(config);
   } // Get a reference to the database service
-  var db = firebase.database();
-  // var recentPostsRef = database.ref('testingg').limitToLast(100); // console.log('HELLLOO') // FIXME: I only want to listen to the 1 session from the OTHER person... // on DB change, update
+  var db = firebase.database(); // if hash already exists, use that session. Else create a new one...
+  // var recentPostsRef = database.ref('testingg').limitToLast(100); // console.log('HELLLOO') // FIXME: I only want to listen to the 1 session from the OTHER person... // on DB change, update // Get a key for a new session. // FIXME: Why is the space all funky.. //
+  var newSessionKey = window.location.hash.replace('#', '');
+  if (!newSessionKey) {
+    newSessionKey =
+      newSessionKey ||
+      db
+        .ref()
+        .child('sessions')
+        .push().key;
+    console.log('newSessionKey', newSessionKey);
+    var updates = {};
+    updates['/sessions/' + newSessionKey] = {
+      content: 'function() {}', // starting info...
+      name: 'Adam Sandler',
+    };
+    db.ref().update(updates);
+    window.location.hash = newSessionKey;
+  }
   var editor = document.querySelector('#editor');
-  db.ref('sessions/01').on('value', snapshot => {
+  db.ref(`sessions/${newSessionKey}`).on('value', snapshot => {
     let arr = [];
     console.log('##### value on server updated', snapshot);
     snapshot.forEach(snap => {
