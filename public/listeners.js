@@ -18,21 +18,22 @@ document.addEventListener('DOMContentLoaded', function() {
   if (!firebase.apps.length) {
     firebase.initializeApp(config);
   } // Get a reference to the database service
-  var db = firebase.database(); // if hash already exists, use that session. Else create a new one...
-  // var recentPostsRef = database.ref('testingg').limitToLast(100); // console.log('HELLLOO') // FIXME: I only want to listen to the 1 session from the OTHER person... // on DB change, update // Get a key for a new session. // FIXME: Why is the space all funky.. //
+  var db = firebase.database(); // var recentPostsRef = database.ref('testingg').limitToLast(100); // console.log('HELLLOO') // FIXME: I only want to listen to the 1 session from the OTHER person... // on DB change, update // Get a key for a new session. // FIXME: Why is the space all funky.. //
+  // if hash already exists, use that session. Else create a new one...
   var newSessionKey = window.location.hash.replace('#', '');
   if (!newSessionKey) {
     newSessionKey =
       newSessionKey ||
-      db
-        .ref()
-        .child('sessions')
-        .push().key;
+      db.ref('sessions').push({
+        startedAt: firebase.database.ServerValue.TIMESTAMP,
+      }).key;
     console.log('newSessionKey', newSessionKey);
     var updates = {};
     updates['/sessions/' + newSessionKey] = {
-      content: 'function() {}', // starting info...
-      name: 'Adam Sandler',
+      content: 'function() {}',
+      // starting info...
+      name: 'Anon', // timestamp: Date.now(),
+      startedAt: firebase.database.ServerValue.TIMESTAMP,
     };
     db.ref().update(updates);
     window.location.hash = newSessionKey;
@@ -44,8 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
     snapshot.forEach(snap => {
       // console.log('#### snap', snap);
       arr.push(snap.val());
-    });
-    // has the content changed? // FIXME: abstract this...
+    }); // has the content changed? // FIXME: abstract this...
     updateEditorWithNewCode(arr[0]); // TODO: for this we'll need to see WHO made the change during the resolution phase... // NAIVE implementation for now... // FIXME: is anchorNode the best node to use? // TODO: abstract this, and move parts of it to the exp page... // OR another page... // TODO: try marker insertion first, and then we can try the other method... // sp2.focus(); // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥 // is this harder or easier than my fancy insertion way? which is more reliable and performant? // sp2.children[2].focus()
     try {
       let app = firebase.app();
