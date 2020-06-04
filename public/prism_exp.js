@@ -13,6 +13,26 @@ var editor = document.getElementById('editor');
 //   editor.innerHTML =
 //     '<div class="code-rows"></div><div id="line-numbers-container"><span aria-hidden="true" class="line-numbers-rows"></span></div>';
 // });
+//
+// FIXME: where do we mark the row num?
+export function updateRowIfNeeded(rowEl) {
+  // debugger;
+  var tokenized = Prism.highlight(
+    rowEl.textContent,
+    Prism.languages.javascript,
+    'javascript',
+  );
+
+  // FIXME: improve this so we only touch innerHTML at the end? FIX this if we have lots of rows we need to tokenize at load...
+  // diff the row, and only update html if it's changed...
+  // ignore <br> with the diff, so "" is same as "<br>
+  if (rowEl.innerHTML.replace('<br>', '') !== tokenized) {
+    rowEl.innerHTML = tokenized;
+    return true; // updated
+  }
+
+  return false; // not updated
+}
 
 // should we update the innerHTML? If yes, update it, and save/restore caret.
 // FIXME: turn this into a line by line diff to see what's dirty and what's clean... Similar to vDom dirty checks...
@@ -80,9 +100,9 @@ function setEditorCode(editor, newContent) {
 }
 
 // FIXME: Add some unit  test around this...
-export function saveCaretPos(editorNode) {
+export function saveCaretPos(rowEl) {
   // try #1: test position along with other data
-  if (!editorNode) throw new Error('PLEASE PASS AN EDITORNODE PARAM!!!');
+  if (!rowEl) throw new Error('PLEASE PASS A rowEl PARAM!!!');
 
   //
   // TODO: Count spaces?
@@ -91,16 +111,21 @@ export function saveCaretPos(editorNode) {
   var aNode = pos.anchorNode;
   var aOffset = pos.anchorOffset;
 
-  // naive assumption that aNode will always be a textNode. Fix if needed.
-  var rowEl = aNode.parentNode.closest('.row');
-  var rowNum = Number(rowEl && rowEl.dataset.rowNum);
+  // naive assumption that aNode will always be a textNode. Fix if needed. It is NOT if the line is blank... If there's no text, then it's not a textNode
+  // if normal node use closest, if textNode, find normal parent and call closest() as soon as its available.
+  // var rowEl =
+  //   (aNode.closest && aNode.closest('.row')) ||
+  //   aNode.parentNode.closest('.row');
+  // var rowNum = Number(rowEl && rowEl.dataset.rowNum); FIXME: We can turn this back on when we store the row num in the dataset
+  if (!rowEl) debugger;
+  var rowNum = whatChildAmI(rowEl); // FIXME: Q: Does it cost more to walk a attached dom tree vs a cloned domtree? Verify somehow...
 
   // move to fn?
   // get charPos from parentNode (editor)
   var curNode = aNode;
   var charCount = aOffset;
   // var charCount = 0;
-  var childNumber = 0; // FIXME: off by one?
+  // var childNumber = 0; // FIXME: off by one?
 
   // if parentNode is NOT the editor (like we're the textNode inside a span), go up one level... TODO: consider doing this only once with aNode...
   // FIXME: remove this check?
@@ -116,12 +141,24 @@ export function saveCaretPos(editorNode) {
   // FIXME: This will ignore the first child...
 
   // skip the current one because we already got count for it with aOffset...
+  // only count chars on the current row we are on...
+
+  // if we already at first child in current row, then bail
+  if (!curNode.previousSibling && curNode.parentNode === rowEl) {
+    return {charPosition: charCount, line: rowNum};
+  }
+
   curNode = curNode.previousSibling || curNode.parentNode.previousSibling;
   while (curNode) {
     var length = curNode.length || curNode.textContent.length; // if textnode, it has length, else we can get the textContent of the tag
     charCount += length;
-    curNode = curNode.previousSibling || curNode.parentNode.previousSibling;
-    childNumber++;
+    // ensure we don't visit the rowEl parentNode. It's child is as high as we should go
+    // FIXME: simplify this logic...
+    // visit the previoesSibling. If NO previusSibling, go up a level, but ONLY if that level isn't a <div class="row"> el
+    curNode =
+      curNode.previousSibling ||
+      (curNode.parentNode !== rowEl && curNode.parentNode.previousSibling);
+    // childNumber++;
   }
 
   // TODO: We only really use charPosition here, so we should  consider just removing the others... It's the only reliable number right now.
@@ -131,14 +168,16 @@ export function saveCaretPos(editorNode) {
 
 // Q: Does offset have to be at the lowest level? Or can it be at a higher level? IS that why codejar traverses the nodes?
 // WE have several ways
-export function restoreCaretPos(editorNode, posObject) {
+// we'll use the current row as the starting point now...
+// So we don't even need the rowNum for the time being...
+export function restoreCaretPos(rowEl, posObject) {
   // var node = posObject.node;
   // var anchorOffset = posObject.offset;
 
   // if editor empty or at beginning go back to very beginning
 
   // Approach #1: Find node based on char position that was saved earlier...
-  var {node, offset} = findNodeFromCharPos(editorNode, posObject.charPosition);
+  var {node, offset} = findNodeFromCharPos(rowEl, posObject.charPosition);
 
   var range = document.createRange();
   var sel = window.getSelection();
@@ -177,6 +216,7 @@ export function restoreCaretPos(editorNode, posObject) {
 // <span class="token parameter">test<span class="token punctuation">,</span></span>
 // WILL return the correct textNode to use...
 function findNodeFromCharPos(parentNode, pos) {
+  // debugger;
   if (!parentNode) throw new Error('PLEASE PASS AN parentNode PARAM!!!');
   var runningCounter = 0;
 
@@ -203,4 +243,19 @@ function findNodeFromCharPos(parentNode, pos) {
 
     runningCounter += curNode.textContent.length;
   }
+}
+
+// pass in node, tells you what child # it is.
+// assume only nodes, and not text nodes...
+// assumes we are already at the right depth level
+function whatChildAmI(node) {
+  var curNode = node;
+  var count = 0;
+
+  while (curNode.previousSibling) {
+    count++;
+    curNode = curNode.previousSibling;
+  }
+
+  return count;
 }

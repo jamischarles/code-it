@@ -7,6 +7,11 @@ import {
 } from './prism_exp';
 import './listeners'; // intiialize the listeners... FIXME: Make this explicit, or add it on page, or something...
 
+// CARET changed
+// document.addEventListener('selectionchange', () => {
+//   console.log('SELECTION changed', document.getSelection());
+// });
+
 // FIXME: Add this back in after we get line numbers working...
 // Use this structure and approach: http://bililite.com/blog/blogfiles/prism/prismeditor.html
 // import './prism-line-numbers';
@@ -46,7 +51,8 @@ editor.addEventListener('keydown', function(e) {
   var BACKSPACE = 8;
   var key = e.keyCode;
   if (key === TAB) handleTab(e);
-  if (key === ENTER) handleEnter(e);
+  // Let's leave this off until we need it... When we do use <br> tags for linebreaks... consistently
+  // if (key === ENTER) handleEnter(e);
   // if (key === BACKSPACE) handleBackspace(e);
 });
 
@@ -83,9 +89,22 @@ editor.addEventListener('keyup', function(e) {
   // updateRowIfNeeded(
   //
   // );
+  // get current row
+  var rowEl = getActiveRowEl();
+  console.log('rowEl', rowEl);
+  // FIXME: this will likely need to be more than 1 row eventually, but for now  let's be naive...
+  //
+  var pos = saveCaretPos(rowEl);
+  var wasUpdated = updateRowIfNeeded(rowEl);
+
+  // if row was updated, we'll need to restore the caret position
+  console.log('wasUpdated', wasUpdated);
+  console.log('pos', pos);
+  if (wasUpdated) {
+    restoreCaretPos(rowEl, pos);
+  }
 
   // TODO Make this switch statement
-  var pos = saveCaretPos(document.getElementById('editor'));
   // Prism.highlightElement(editor, false, function() {
   //   console.log('done', arguments);
   //   console.log('pos', pos);
@@ -107,6 +126,24 @@ editor.addEventListener('keyup', function(e) {
     .ref()
     .update(updates);
 });
+
+// utils. TODO: move this somewhere else?
+function getActiveRowEl() {
+  // get caret
+  var sel = window.getSelection();
+  var rowEl;
+
+  // current textNode at cursor (works unless row is blank. Then it can be at a elNode
+  var aNode = sel.anchorNode;
+  // if you are a textNode
+  if (aNode.nodeType === 3) {
+    rowEl = aNode.parentNode.closest('.row');
+  } else {
+    rowEl = aNode.closest('.row');
+  }
+
+  return rowEl;
+}
 
 // listen for special keys...
 //https://stackoverflow.com/questions/4604930/changing-the-keypress
@@ -203,13 +240,45 @@ function handleEnter(e) {
   // div.innerHTML = 'new row';
   div.innerHTML = test.textContent;
   // if no content, add blank space. You must have at least a space, or the caret won't move there...
-  if (test.textContent.length == 0) {
-    div.innerHTML = ' ';
+  // debugger;
+  if (test.textContent === '\u{200B}') console.log('MATCH', test.textContent);
+  var zeroWidthSpace = '\u{200B}';
+  // unicode reading...
+  // https://dmitripavlutin.com/what-every-javascript-developer-should-know-about-unicode/
+  // https://flaviocopes.com/javascript-unicode/
+  if (test.textContent.length == 0 || test.textContent === zeroWidthSpace) {
+    // div.innerHTML = ' ';
+    // div.innerHTML = '&nbsp;';
+    //https://stackoverflow.com/a/2973713 ZERO width space... (stole this from code mirror)
+    // div.innerHTML = '<span>&#8203;</span>';
+    div.innerHTML = '<br>';
+    // div.style = 'display: inline-block; width: 1px; margin-right: -1px';
   }
   // div.appendChild(test);
 
   // insert new row after current row
   rowEl.insertAdjacentElement('afterend', div);
+
+  // if rowEl is empty after moving the space down, then add a space back to ensure no rows are totally empty
+  if (rowEl.textContent.length === 0) {
+    // rowEl.innerHTML = '&nbsp;';
+    // rowEl.innerHTML = '&ensp;';
+    // rowEl.innerHTML = '<span>&#8203;</span>';
+
+    div.innerHTML = '<br>';
+    // \u0000
+    // \U+200B).
+    //
+    // Learnings:
+    //
+    // this unicode char is great for zero-width, but works less well than <br> because there is a right and left to it, so you have to baspace 2x to get to the next line. <br> seems to work well, because it allows for cursor, is selectable, and only needs one backspace to clear the row...
+    // if (test.textContent === '\u{200B}') console.log('MATCH', test.textContent);
+    // var zeroWidthSpace = '\u{200B}';
+    // unicode reading...
+    // https://dmitripavlutin.com/what-every-javascript-developer-should-know-about-unicode/
+    // https://flaviocopes.com/javascript-unicode/
+    //
+  }
 
   // move cursor to start of new row
   var range = sel.getRangeAt(0);
@@ -228,6 +297,8 @@ function handleEnter(e) {
 }
 
 // TODO: don't allow user to erase the only backspace remaining... Add it back in if they do...
+// when you try to backspace an empty line, remove the line
+// OR we can try this https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver
 function handleBackspace() {
   // am I at POS 1 on any row other than 1
   var sel = window.getSelection();
@@ -245,3 +316,38 @@ function removeRow() {}
 
 // TODO: handle opposite shift
 // e.shiftKey=true
+//
+//
+// TODO: call this at the correct time...
+// FIXME: consider using a simple hooks / pub sub system?
+// FIXME: do we want to highlight before we fetch the code from firebase? We'll have to see about cost. For now, yes...
+function init(rows) {
+  highlightEachRow(rows);
+}
+
+// or we can add a mutation observer? is that a good way to listen for initial population?
+// No. I'd rather fire some manual events...
+// At some point could could consider redux or xstate, but that's overkill right now...
+function highlightEachRow(rowsContainer) {
+  console.log('rowsContainer', rowsContainer.children);
+  var rows = rowsContainer.children;
+
+  // turn the html collection into an array
+  Array.from(rows).forEach(rowEl => {
+    var tokenized = Prism.highlight(
+      rowEl.textContent,
+      Prism.languages.javascript,
+      'javascript',
+    );
+
+    // FIXME: improve this so we only touch innerHTML at the end? FIX this if we have lots of rows we need to tokenize at load...
+    // diff the row, and only update html if it's changed...
+    if (rowEl.innerHTML !== tokenized) {
+      rowEl.innerHTML = tokenized;
+    }
+  });
+}
+
+var rowsContainer = document.querySelector('#editor .rows');
+
+setTimeout(() => init(rowsContainer), 500);

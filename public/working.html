@@ -42,7 +42,16 @@ code[class*="language-"] {
       /* .row, .rows  { display: inline;} */
 
       /* Stop an empty row div from collapsing. MAGIC */
-      .row:empty:before {
+      /* .row:empty:before { */
+      .row:empty {
+        /* border: 0; */
+        /* outline: 0; */
+        /* min-width: 100px; */
+        /*  height: 30px; */
+        /*  height: 1em; */
+        /* height: 21px; */
+        /* padding-left: 1px; */
+
         /* content: '\a0'; */
         /* REPLACE with something that allows the cursor to go there... Currently doesn't work... */
         /* or we just have &nbsp; when blank using JS...*/
