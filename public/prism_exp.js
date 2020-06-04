@@ -1,5 +1,7 @@
 import Prism from 'prismjs';
 
+// TODO: we'll want to eventually tototaly control the DOM and not let the editor handle new row additiosn because of rare quirks there...
+
 var editor = document.getElementById('editor');
 
 //

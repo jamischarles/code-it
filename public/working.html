@@ -98,6 +98,8 @@ code[class*="language-"] {
 
       // 3. We'll likely want to handle enter key manually so that we can enforce consistent behavior that we want across browsers...
 
+      // 4. There's enough quirks with 2, that we're better off virtualizing it so we can enforce consistent behavior. It basically just means that we use the browser primitives and disable the default quirky behavior...
+
       window.Prism = window.Prism || {};
       window.Prism.manual = true;
     </script>

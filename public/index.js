@@ -7,6 +7,16 @@ import {
 } from './prism_exp';
 import './listeners'; // intiialize the listeners... FIXME: Make this explicit, or add it on page, or something...
 
+// Learnings:
+//
+// this unicode char is great for zero-width, but works less well than <br> because there is a right and left to it, so you have to baspace 2x to get to the next line. <br> seems to work well, because it allows for cursor, is selectable, and only needs one backspace to clear the row...
+// if (test.textContent === '\u{200B}') console.log('MATCH', test.textContent);
+// var zeroWidthSpace = '\u{200B}';
+// unicode reading...
+// https://dmitripavlutin.com/what-every-javascript-developer-should-know-about-unicode/
+// https://flaviocopes.com/javascript-unicode/
+//
+
 // CARET changed
 // document.addEventListener('selectionchange', () => {
 //   console.log('SELECTION changed', document.getSelection());
@@ -52,7 +62,7 @@ editor.addEventListener('keydown', function(e) {
   var key = e.keyCode;
   if (key === TAB) handleTab(e);
   // Let's leave this off until we need it... When we do use <br> tags for linebreaks... consistently
-  // if (key === ENTER) handleEnter(e);
+  if (key === ENTER) handleEnter(e);
   // if (key === BACKSPACE) handleBackspace(e);
 });
 
@@ -185,116 +195,65 @@ function handleTab(e) {
 // FIXME: turn this into several smaller, reusable functions...
 // TODO:  support: if at very beginning/end of line...
 function handleEnter(e) {
-  console.log('enter:', e);
   e.preventDefault();
 
-  var sel = window.getSelection();
-  var range = sel.getRangeAt(0);
-  console.log('range', range);
-  // range.deleteContents();
-  // range.setStart(div.childNodes[0], 0);
-  // Q: Do we need to manually find hte last node?
-  // range.setEnd(div.childNodes[0], 0);
-  console.log('sel', sel);
+  var rowEl = getActiveRowEl();
 
-  // current textNode at cursor (works unless row is blank. Then it can be at a elNode
-  var aNode = sel.anchorNode;
-  // if you are a textNode
-  if (aNode.nodeType === 3) {
-    var rowEl = aNode.parentNode.closest('.row');
-  } else {
-    var rowEl = aNode.closest('.row');
-  }
-
-  console.log('rowEl', rowEl);
-
-  // TODO: consider just using a div here that's block...
-  // var textNode = document.createTextNode('\n');
+  // create new row
   var div = document.createElement('div');
   div.className = 'row';
-  // cut and paste content to new row (anything after caret)
-  // https://developer.mozilla.org/en-US/docs/Web/API/Range/cloneContents
-  // range.cloneContents (COPY)
 
-  //https://developer.mozilla.org/en-US/docs/Web/API/Range/extractContents
-  // range.extractContents (CUT)
-  // range.selectNode(rowEl);
-  //
+  // cut out parts of old row that need to go in new row
+  var fragmentForNewLine = cutRowContentAfterCaret();
+  div.innerHTML = fragmentForNewLine.textContent;
 
-  //  https://developer.mozilla.org/en-US/docs/Web/API/Range/toString //
-  var range = document.createRange();
-
-  // range.setStartBefore(aNode, sel.anchorOffset); // start at current caret
-  // TODO: Test this when it's an el that's already been formatted.
-  // TODO: extract this into a separate fn...
-  range.setStart(aNode, sel.anchorOffset); // HACK: needs a -1 if at the very end? WHY? isn't long enough? Maybe end is the problem? Set start before? or after?
-  // range.setEnd(rowEl, sel.anchorOffset); // HACK: needs a -1 if at the very end? WHY?
-  range.setEndAfter(rowEl, 0);
-  //
-  // range.setStart(aNode, 0);
-  // range.setEnd(rowEl.lastChild, 0);
-  console.log('range', range);
-  // could use clone + delete, OR extract()
-  var test = range.extractContents();
-  console.log('test', test);
-  // div.innerHTML = 'new row';
-  div.innerHTML = test.textContent;
-  // if no content, add blank space. You must have at least a space, or the caret won't move there...
-  // debugger;
-  if (test.textContent === '\u{200B}') console.log('MATCH', test.textContent);
-  var zeroWidthSpace = '\u{200B}';
-  // unicode reading...
-  // https://dmitripavlutin.com/what-every-javascript-developer-should-know-about-unicode/
-  // https://flaviocopes.com/javascript-unicode/
-  if (test.textContent.length == 0 || test.textContent === zeroWidthSpace) {
-    // div.innerHTML = ' ';
-    // div.innerHTML = '&nbsp;';
-    //https://stackoverflow.com/a/2973713 ZERO width space... (stole this from code mirror)
-    // div.innerHTML = '<span>&#8203;</span>';
+  // if row will have no content ensure <br> tag so it can hold the caret.
+  if (fragmentForNewLine.textContent.length == 0) {
     div.innerHTML = '<br>';
-    // div.style = 'display: inline-block; width: 1px; margin-right: -1px';
   }
-  // div.appendChild(test);
 
-  // insert new row after current row
+  // insert the newly created row after current row
   rowEl.insertAdjacentElement('afterend', div);
 
   // if rowEl is empty after moving the space down, then add a space back to ensure no rows are totally empty
+  // this occurs when you hit enter on a row and the caret is at char:0 (first spot)
+  // (empty rows can't hold a caret)
   if (rowEl.textContent.length === 0) {
-    // rowEl.innerHTML = '&nbsp;';
-    // rowEl.innerHTML = '&ensp;';
-    // rowEl.innerHTML = '<span>&#8203;</span>';
-
-    div.innerHTML = '<br>';
-    // \u0000
-    // \U+200B).
-    //
-    // Learnings:
-    //
-    // this unicode char is great for zero-width, but works less well than <br> because there is a right and left to it, so you have to baspace 2x to get to the next line. <br> seems to work well, because it allows for cursor, is selectable, and only needs one backspace to clear the row...
-    // if (test.textContent === '\u{200B}') console.log('MATCH', test.textContent);
-    // var zeroWidthSpace = '\u{200B}';
-    // unicode reading...
-    // https://dmitripavlutin.com/what-every-javascript-developer-should-know-about-unicode/
-    // https://flaviocopes.com/javascript-unicode/
-    //
+    rowEl.innerHTML = '<br>';
   }
 
   // move cursor to start of new row
-  var range = sel.getRangeAt(0);
-  console.log('range', range);
-  // range.deleteContents(); // actually delete the html in the range... interesting... Could be useful after cloning it...
-  range.setStart(div.childNodes[0] || div, 0);
-  range.setEnd(div.childNodes[0], 0);
-  sel.removeAllRanges();
-  sel.addRange(range);
+  moveCursorToLineStart(div);
 
-  // create a new row
-  // decide what should go in it
-  // append it
+  function moveCursorToLineStart(div) {
+    var sel = window.getSelection();
+    var range = sel.getRangeAt(0);
+    console.log('range', range);
+    // range.deleteContents(); // actually delete the html in the range... interesting... Could be useful after cloning it...
+    range.setStart(div.childNodes[0] || div, 0);
+    range.setEnd(div.childNodes[0], 0);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
 
-  // var sel = window.getSelection();
+  // TODO: move out of parent fn?
+  // returns a doc fragment of the content of the code row AFTER where the caret is, and removes from row
+  // (basically what you need if you hit "enter" in the middle or a row
+  function cutRowContentAfterCaret() {
+    var sel = window.getSelection();
+    //  https://developer.mozilla.org/en-US/docs/Web/API/Range/toString
+    var range = document.createRange();
+    range.setStart(sel.anchorNode, sel.anchorOffset); // HACK: needs a -1 if at the very end? WHY? isn't long enough? Maybe end is the problem? Set start before? or after?
+    range.setEndAfter(rowEl, 0);
+
+    // could use clone + delete, OR extract()
+    var docFragment = range.extractContents();
+
+    return docFragment;
+  }
 }
+
+// util fns
 
 // TODO: don't allow user to erase the only backspace remaining... Add it back in if they do...
 // when you try to backspace an empty line, remove the line
