@@ -4,6 +4,7 @@
     <!-- <link rel="stylesheet" href="assets/highlight/styles/dracula.css"> -->
     <!-- <link rel="stylesheet" href="prism.css" /> -->
     <link rel="stylesheet" href="prism-tomorrow.css" />
+    <link rel="stylesheet" href="prism-line-numbers.css" />
 
 
     <style>
@@ -23,7 +24,7 @@
       .editor:focus{ outline: none;}
 
       .parent {
-        box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2);
+        /* box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2); */
         max-width: 700px;
         margin: 60px auto;
         /* padding: 10px; */
@@ -36,6 +37,18 @@ code[class*="language-"] {
   font-size: 14px;
   font-family: 'Source Code Pro', 'Consolas', Monaco, 'Andale Mono', 'Ubuntu Mono', monospace
 }
+
+      /* Contenteditable fixes*/
+      /* .row, .rows  { display: inline;} */
+
+      /* Stop an empty row div from collapsing. MAGIC */
+      .row:empty:before {
+        /* content: '\a0'; */
+        /* REPLACE with something that allows the cursor to go there... Currently doesn't work... */
+        /* or we just have &nbsp; when blank using JS...*/
+        /* Type of space here really matters... interesting!!! This affects backspace too...*/
+        /* content: ' '; */
+      }
     </style>
 
 
@@ -50,13 +63,35 @@ code[class*="language-"] {
 </head>
 <body>
 
-  <div class="parent"><pre><code id="editor" class="editor language-javascript" contenteditable="true">function(){<br><br>}</code></pre></div>
+  <div class="parent"><pre class="language-javascript"><code id="editor" class="editor language-javascript" contenteditable="true"><div class="rows"><div class="row">function(){} </div></div></code></pre>
+
+  <!-- <div class="parent"><pre class="line&#45;numbers"><code id="editor" class="editor language&#45;javascript" contenteditable="true"> -->
+  <!-- <div class="code&#45;rows"> </div><div id="line&#45;numbers&#45;container"><span aria&#45;hidden="true" class="line&#45;numbers&#45;rows"></span></div></code></pre> -->
+
+    <!-- <p>List out keycommands here:</p> -->
+  </div>
+
 
 
     <!-- <script src="https://myCDN.com/prism@v1.x/components/prism&#45;core.min.js"></script> -->
     <!-- <script src="https://myCDN.com/prism@v1.x/plugins/autoloader/prism&#45;autoloader.min.js"></script> -->
 
     <!-- TODO: load this via Parcel... -->
+    <script>
+      // disable auto highlighting and html hijacking
+      // Learnings: TODO: Save this somewhere
+      // 1. Contenteditable seems to have a number of native benefits:
+      // 1a. Undo / Redo history built in
+      // 1b. When I provide a child node it treats that as a "row" node and duplicates it when I add a new row...
+      // 2. Using a DIV vs a SPAN in a contenteditable seems to have different effects
+      // 2a. DIV inserts <br> tags for newlines, where span doesn't. (seems to be affected by block element vs inline...
+      // https://stackoverflow.com/questions/6023307/dealing-with-line-breaks-on-contenteditable-div
+
+      // 3. We'll likely want to handle enter key manually so that we can enforce consistent behavior that we want across browsers...
+
+      window.Prism = window.Prism || {};
+      window.Prism.manual = true;
+    </script>
     <script src="./index.js"></script>
 
 

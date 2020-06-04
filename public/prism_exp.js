@@ -2,7 +2,20 @@ import Prism from 'prismjs';
 
 var editor = document.getElementById('editor');
 
+//
+// TODO: Consider instead of this markup swapping magic, we can just use different classes and change the prism styling rules...
+// Or find a way to have prism not auto-init itself...
+// Becuase Prism auto-inits and wipes out our content, we need to replace it here after the auto-init...
+// Prism.hooks.add('complete', function(env) {
+//   console.log('Prism: complete hook fired', env);
+//   var editor = document.getElementById('editor');
+//
+//   editor.innerHTML =
+//     '<div class="code-rows"></div><div id="line-numbers-container"><span aria-hidden="true" class="line-numbers-rows"></span></div>';
+// });
+
 // should we update the innerHTML? If yes, update it, and save/restore caret.
+// FIXME: turn this into a line by line diff to see what's dirty and what's clean... Similar to vDom dirty checks...
 export function updateEditorWithNewCode(newRawCode) {
   // current tokenized code
   var oldCode = editor.innerHTML;
@@ -19,10 +32,31 @@ export function updateEditorWithNewCode(newRawCode) {
 
   if (oldCode !== newCode) {
     console.log('Code changed remotely. Update editor');
-    setEditorCode(editor, newCode);
+    // setEditorCode(editor, newCode);
+    // setEditorCode(editor, prepNewMarkup(newRawCode).join(''));
   } else {
     console.log('Code has NOT changed remotely. NO updates.');
   }
+
+  console.log('prepNewMarkup(newRawCode)', prepNewMarkup(newRawCode));
+}
+
+//
+function prepNewMarkup(newContent) {
+  var rows = newContent.split('\n');
+  // var fragment = new DocumentFragment();
+
+  var arr = rows.map((item, i) => {
+    var tokenizedCode = Prism.highlight(
+      item,
+      Prism.languages.javascript,
+      'javascript',
+    );
+    return `<div class="row" data-row-num=${i + 1}>${tokenizedCode ||
+      '&nbsp;'}</div>`;
+  });
+
+  return arr;
 }
 
 // TODO: Add support for 1 line at a time eventually
@@ -32,7 +66,15 @@ export function getEditorCode(editor) {
 
 // FIXME: should I save and restore caret in here?
 // FIXME: should I diff in here?
+// TODO:
+// Now splits editor into ROW divs. This allows us to have more efficient diffing and keep track of lines better.
 function setEditorCode(editor, newContent) {
+  // TODO: come up with better diff algo
+  // We want to be able to handle partial updates over the wire as well as full updates.
+  //
+  // first time, add <div> rows
+  // subsequent times, add/replace/update <div> rows
+
   editor.innerHTML = newContent;
   // return editor.textContent; // ignore all the html. Just the textNodes.
 }
@@ -48,6 +90,10 @@ export function saveCaretPos(editorNode) {
   var pos = window.getSelection(); // get cursor position
   var aNode = pos.anchorNode;
   var aOffset = pos.anchorOffset;
+
+  // naive assumption that aNode will always be a textNode. Fix if needed.
+  var rowEl = aNode.parentNode.closest('.row');
+  var rowNum = Number(rowEl && rowEl.dataset.rowNum);
 
   // move to fn?
   // get charPos from parentNode (editor)
@@ -80,7 +126,7 @@ export function saveCaretPos(editorNode) {
 
   // TODO: We only really use charPosition here, so we should  consider just removing the others... It's the only reliable number right now.
   // return {node: aNode, offset: offset, charPosition: charCount, childNumber};
-  return {charPosition: charCount};
+  return {charPosition: charCount, line: rowNum};
 }
 
 // Q: Does offset have to be at the lowest level? Or can it be at a higher level? IS that why codejar traverses the nodes?
