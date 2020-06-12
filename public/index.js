@@ -124,18 +124,84 @@ editor.addEventListener('keyup', function(e) {
   // TODO: extract this...
   // Push to FB
   // var currentSessionKey = '01';
+  // send only the current row across the wire
+  var payload = prepPayloadToSend(pos.line, rowEl);
+  sendUpdate(payload);
+});
+
+function prepPayloadToSend(line, rowEl) {
+  var content = rowEl.textContent;
+  return {type: 'update', line, content};
+}
+
+// multiplayer functionality. Single player will go in prism_exp.js
+// Q: If we rapidly send 5 updates, will those 5 be pushed out to listening clients, or will some be dropped?
+function sendUpdate(contentToPush) {
   // FIXME: store this in localstorage or in global window?
   var currentSessionKey = window.location.hash.replace('#', '');
 
   var updates = {};
-  updates[`/sessions/${currentSessionKey}/content`] = getEditorCode(editor);
+  updates[`/sessions/${currentSessionKey}/updates`] = contentToPush;
+
+  console.log('contentToPush', contentToPush);
 
   // TODO: we must debounce these update DB writes somehow... Though websockets makes the network penalty much less looks like...
   firebase
     .database()
     .ref()
+    // .set(updates);
     .update(updates);
-});
+  // Q: Diff between update and SET?
+  // https://medium.com/@jasonbyrne/closer-look-at-firebase-set-versus-update-eceff34d056b
+  //
+
+  // TODO: when we send a snapshot we can wipe out the updates arr...
+  // if it's just a stream can we just replace each one anyway? TODO: research how FB handles that...
+}
+
+// TODO: rename to 'processUpdate'?
+function receiveUpdate(obj) {
+  console.log('server updates sent', obj);
+  var rowsContainer = document.querySelector('#editor .rows');
+
+  var rowEl = rowsContainer.childNodes[obj.line];
+
+  // if it's a new row, we need to create new row...
+  if (!rowEl) {
+    // create new row
+    var rowEl = document.createElement('div');
+    rowEl.className = 'row';
+    rowsContainer.appendChild(rowEl);
+  }
+
+  applyRemoteUpdates(rowEl, obj.content);
+
+  // TODO: add some reconciliation logic...
+  // TODO: look at the multiplayer post for Excalidraw...
+  //
+}
+
+// FIXME: can we combine / colocate this with updateRowIfNeeded()
+// Q: Why does location & taxonomy cause me so much stress while I'm just working out the bits? Fugly code should be fine at this stage...
+function applyRemoteUpdates(rowEl, newContent) {
+  var tokenized = Prism.highlight(
+    newContent,
+    Prism.languages.javascript,
+    'javascript',
+  );
+
+  // FIXME: improve this so we only touch innerHTML at the end? FIX this if we have lots of rows we need to tokenize at load...
+  // diff the row, and only update html if it's changed...
+  // ignore <br> with the diff, so "" is same as "<br>
+  if (rowEl.innerHTML.replace('<br>', '') !== tokenized) {
+    rowEl.innerHTML = tokenized;
+    console.log('Remote update applied');
+    return true; // updated
+  }
+
+  console.log('Remote update NOT applied');
+  return false; // not updated
+}
 
 // utils. TODO: move this somewhere else?
 function getActiveRowEl() {
@@ -272,6 +338,51 @@ function handleBackspace() {
 function addRow() {}
 
 function removeRow() {}
+
+// TODO: move this somewhere else?
+// TODO: extract this into non-anon function
+// Firebase setup and listen for FB db updates...
+document.addEventListener('DOMContentLoaded', function() {
+  var config = {
+    apiKey: 'AIzaSyBAGaPPcu3kGWZLDj_u-UvFc8whXkUAdpoa', // authDomain: "code-it-228a1.firebaseapp.com",
+    databaseURL: 'https://code-it-228a1.firebaseio.com', // storageBucket: "bucket.appspot.com"
+  };
+
+  if (!firebase.apps.length) {
+    firebase.initializeApp(config);
+  } // Get a reference to the database service
+
+  var db = firebase.database();
+
+  var newSessionKey = window.location.hash.replace('#', '');
+
+  // if hash already exists, use that session. Else create a new one...
+  if (!newSessionKey) {
+    newSessionKey =
+      newSessionKey ||
+      db.ref('sessions').push({
+        startedAt: firebase.database.ServerValue.TIMESTAMP,
+      }).key;
+
+    console.log('newSessionKey', newSessionKey);
+
+    var updates = {};
+    updates['/sessions/' + newSessionKey] = {
+      content: 'function() {}', // starting info...
+      name: 'Anon', // timestamp: Date.now(),
+      startedAt: firebase.database.ServerValue.TIMESTAMP,
+    };
+
+    db.ref().update(updates);
+    window.location.hash = newSessionKey;
+  }
+
+  db.ref(`sessions/${newSessionKey}/updates`).on('value', snapshot => {
+    var obj = snapshot.val();
+
+    receiveUpdate(obj);
+  });
+});
 
 // TODO: handle opposite shift
 // e.shiftKey=true

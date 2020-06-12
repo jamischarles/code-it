@@ -184,14 +184,6 @@ export function restoreCaretPos(rowEl, posObject) {
   var range = document.createRange();
   var sel = window.getSelection();
 
-  // Q: TODO: Maybe simply
-  // codejar way
-  // sel.setBaseAndExtent;
-  // return;
-  // old way
-
-  // range.setStart(editorNode.childNodes[3], 0);
-
   // APPROACH #1
   // range.setStart(editorNode.childNodes[posObject.childNumber], 0); // Works decently (using childnumber)
   // APPROACH #2
