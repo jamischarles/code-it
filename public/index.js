@@ -1,5 +1,12 @@
 import Prism from 'prismjs';
 import {
+  saveCurrentEditorToState,
+  generateSimpleOperationFromKeystroke,
+  getState,
+  subscribe,
+} from './state';
+import {renderToDom, writeHtmlStrFromState, renderCaret} from './render';
+import {
   updateRowIfNeeded,
   saveCaretPos,
   restoreCaretPos,
@@ -59,11 +66,46 @@ editor.addEventListener('keydown', function(e) {
   var ENTER = 13;
   var TAB = 9;
   var BACKSPACE = 8;
+  var SHIFT = 16;
+  var CTRL = 17;
+  var ALT = 18;
+  var META = 91; // COMMAND
   var key = e.keyCode;
-  if (key === TAB) handleTab(e);
+
+  // FIXME: instead of opt out, maybe we can just opt in to all the keys...?
+  // use regex? for [0-9a-z] and all the chars allowed? Basically alpha numeric...
+  // or just make sure there's content involved, and if not, don't treat it like content...
+  // maybe use .KEY prop?
+
+  // get the position BEFORE the change is made...
+  var rowEl = getActiveRowEl();
+  var pos = saveCaretPos(rowEl);
+
+  // if (key === TAB) handleTab(e);
   // Let's leave this off until we need it... When we do use <br> tags for linebreaks... consistently
-  if (key === ENTER) handleEnter(e);
+  // TODO: Turn these back on once we have the other stuff working better...
+  // if (key === ENTER) handleEnter(e);
+
   // if (key === BACKSPACE) handleBackspace(e);
+  //
+
+  // for arrow keys, don't generate operations for now (eventually we'll want to update caret state). Maybe use the listener...
+  // FIXME: replace this with array
+  // FIXME: or replace with switch...
+  if (key === 37 || key === 38 || key === 39 || key === 40) return;
+
+  if (key === SHIFT || key === ALT || key === META || key === CTRL) return;
+
+  // IS cmd different keycode on FF vs chrome?!?
+  if (e.metaKey) return; // does this even help?
+
+  // for all other mutative actions, catch them, and update in state before updating the UI
+  e.preventDefault();
+  generateSimpleOperationFromKeystroke(e, pos);
+  renderCaret(getState().carets[0]);
+  // var state = getState();
+  // console.log('state', state);
+  // writeHtmlStrFromState(state);
 });
 
 // TODO next: just debounce this when you've stopped typing...
@@ -77,6 +119,7 @@ editor.addEventListener('keyup', function(e) {
   // if arrow keys, don't re-format
   // Also shift selection
   // also command keys (metaKey)
+  //https://css-tricks.com/snippets/javascript/javascript-keycodes/
   if (
     key === 37 ||
     key === 38 ||
@@ -126,7 +169,9 @@ editor.addEventListener('keyup', function(e) {
   // var currentSessionKey = '01';
   // send only the current row across the wire
   var payload = prepPayloadToSend(pos.line, rowEl);
-  sendUpdate(payload);
+
+  saveCurrentEditorToState(editor);
+  // sendUpdate(payload);
 });
 
 function prepPayloadToSend(line, rowEl) {
@@ -260,6 +305,8 @@ function handleTab(e) {
 
 // FIXME: turn this into several smaller, reusable functions...
 // TODO:  support: if at very beginning/end of line...
+// FIXME: this will need to update state instead of what we're seeing here
+// we are operating on a virtual dom now that is rendered to the real dom...
 function handleEnter(e) {
   e.preventDefault();
 
@@ -380,7 +427,7 @@ document.addEventListener('DOMContentLoaded', function() {
   db.ref(`sessions/${newSessionKey}/updates`).on('value', snapshot => {
     var obj = snapshot.val();
 
-    receiveUpdate(obj);
+    // receiveUpdate(obj);
   });
 });
 
@@ -392,7 +439,29 @@ document.addEventListener('DOMContentLoaded', function() {
 // FIXME: consider using a simple hooks / pub sub system?
 // FIXME: do we want to highlight before we fetch the code from firebase? We'll have to see about cost. For now, yes...
 function init(rows) {
-  highlightEachRow(rows);
+  // highlightEachRow(rows);
+  renderToDom(rows.children[0], writeHtmlStrFromState(getState(), 0));
+
+  // subscribe to state updates
+  // Should this fire the first time?
+  subscribe(state => {
+    console.log('***********UPDATE*************', state);
+    // var rowEl = getActiveRowEl();
+    // do we still need this here? or can we move this to state.js?
+    // we should recalc where the cursor should be  after we perform an operation...
+    //
+    // var pos = saveCaretPos(rowEl);
+    // console.log('save:pos before render', pos);
+    // Q: How do we calculate the new insertion point? Should state save and tell use what the new pos should be? Yes. State should store the pos.
+    // We don't need operations to move caret, but can be a simple replace. pos=5:3. Should it be based on charID as well? I think so...
+    // That way we can group it with a char that was just inserted, and it will move along with the chars. YES. That's how we should store caret pos in state...
+    renderToDom(rows.children[0], writeHtmlStrFromState(state, 0));
+    renderCaret();
+    // console.log('restore:pos after render', pos);
+    // restoreCaretPos(rowEl, pos);
+
+    // renderCarets(state.carets);
+  });
 }
 
 // or we can add a mutation observer? is that a good way to listen for initial population?
@@ -420,4 +489,5 @@ function highlightEachRow(rowsContainer) {
 
 var rowsContainer = document.querySelector('#editor .rows');
 
-setTimeout(() => init(rowsContainer), 500);
+init(rowsContainer);
+// setTimeout(() => init(rowsContainer), 500);

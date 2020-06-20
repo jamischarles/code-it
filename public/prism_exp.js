@@ -101,18 +101,11 @@ function setEditorCode(editor, newContent) {
   // return editor.textContent; // ignore all the html. Just the textNodes.
 }
 
-// FIXME: Add some unit  test around this...
-export function saveCaretPos(rowEl) {
-  // try #1: test position along with other data
-  if (!rowEl) throw new Error('PLEASE PASS A rowEl PARAM!!!');
-
-  //
-  // TODO: Count spaces?
-  // debugger;
-  var pos = window.getSelection(); // get cursor position
-  var aNode = pos.anchorNode;
-  var aOffset = pos.anchorOffset;
-
+// FIXME: should we combine this with saveCaretPos or  just refactor it a bit? I don't like having the duped logic...
+// returns the charPosition on the current line...
+// FIXME: improve this name?
+// Use this when you are trying to get start/stop point on a selection or similar
+export function getCharPosFromSelectionObj(rowEl, focusedNode, offset) {
   // naive assumption that aNode will always be a textNode. Fix if needed. It is NOT if the line is blank... If there's no text, then it's not a textNode
   // if normal node use closest, if textNode, find normal parent and call closest() as soon as its available.
   // var rowEl =
@@ -124,8 +117,8 @@ export function saveCaretPos(rowEl) {
 
   // move to fn?
   // get charPos from parentNode (editor)
-  var curNode = aNode;
-  var charCount = aOffset;
+  var curNode = focusedNode;
+  var charCount = offset;
   // var charCount = 0;
   // var childNumber = 0; // FIXME: off by one?
 
@@ -163,23 +156,44 @@ export function saveCaretPos(rowEl) {
     // childNumber++;
   }
 
+  return {charPosition: charCount, line: rowNum};
+}
+
+// FIXME: Add some unit  test around this...
+// Use this when there's an active caret and we only care about storing that pos and not about the selection
+// FIXME: maybe we can remove this one and just use the other one...
+export function saveCaretPos(rowEl) {
+  // try #1: test position along with other data
+  if (!rowEl) throw new Error('PLEASE PASS A rowEl PARAM!!!');
+
+  var pos = window.getSelection(); // get cursor position
+  var aNode = pos.anchorNode;
+  var aOffset = pos.anchorOffset;
+
+  // return {charPosition: charCount, line: rowNum};
+  return getCharPosFromSelectionObj(rowEl, aNode, aOffset);
+
   // TODO: We only really use charPosition here, so we should  consider just removing the others... It's the only reliable number right now.
   // return {node: aNode, offset: offset, charPosition: charCount, childNumber};
-  return {charPosition: charCount, line: rowNum};
+  // return {charPosition: charCount, line: rowNum};
 }
 
 // Q: Does offset have to be at the lowest level? Or can it be at a higher level? IS that why codejar traverses the nodes?
 // WE have several ways
 // we'll use the current row as the starting point now...
 // So we don't even need the rowNum for the time being...
-export function restoreCaretPos(rowEl, posObject) {
+export function restoreCaretPos(rowEl, charPosition) {
   // var node = posObject.node;
   // var anchorOffset = posObject.offset;
 
-  // if editor empty or at beginning go back to very beginning
-
   // Approach #1: Find node based on char position that was saved earlier...
-  var {node, offset} = findNodeFromCharPos(rowEl, posObject.charPosition);
+  var result = findNodeFromCharPos(rowEl, charPosition);
+
+  // fallback. if no node is found, use the rowEl node. happens in rare cases like when you have 1 char, and you delete it.
+  var node = (result && result.node) || rowEl;
+  var offset = (result && result.offset) || 0;
+
+  // if (!node) node = rowEl;
 
   var range = document.createRange();
   var sel = window.getSelection();
@@ -210,7 +224,6 @@ export function restoreCaretPos(rowEl, posObject) {
 // <span class="token parameter">test<span class="token punctuation">,</span></span>
 // WILL return the correct textNode to use...
 function findNodeFromCharPos(parentNode, pos) {
-  // debugger;
   if (!parentNode) throw new Error('PLEASE PASS AN parentNode PARAM!!!');
   var runningCounter = 0;
 
@@ -243,6 +256,7 @@ function findNodeFromCharPos(parentNode, pos) {
 // assume only nodes, and not text nodes...
 // assumes we are already at the right depth level
 function whatChildAmI(node) {
+  // debugger;
   var curNode = node;
   var count = 0;
 
