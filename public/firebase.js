@@ -269,7 +269,7 @@ function setMyPeerID() {
       } else {
         console.log('Registered new PEER:', PEER_ID);
       }
-      console.log('PEER data: ', snapshot.val());
+      console.log('PEER data: ', snapshot && snapshot.val());
       // Call this here, because at this point PEER_ID is ready AND the DB is ready...
       afterDbIsReady();
     },
@@ -326,8 +326,10 @@ export function sendCaretPos() {
 // onile,offline, movecaret, etc...
 // FIXME: break this out into /subscribe online/iffline state fn
 function afterDbIsReady() {
+  // LISTEN FOR SELF status changes
   var connectedRef = db.ref('.info/connected');
   // when connectionStatus Changes...
+  // set myself as onfline/offline
   connectedRef.on('value', function(snap) {
     if (snap.val() === true) {
       sendStatusUpdate(true);
@@ -343,10 +345,34 @@ function afterDbIsReady() {
       myConnectionsRef.set({status: 'online'});
 
       // remove this reference on disconnect (this op is stored on server)
+      // FIXME: do we need to clean this up? are we getting too many listeners?
+      // Should this be separate from online handler?
       myConnectionsRef.onDisconnect().remove();
+      document.getElementById('online-status').innerHTML = 'ONLINE';
     } else {
       sendStatusUpdate(false);
+
+      document.getElementById('online-status').innerHTML = 'OFFLINE';
+      // FIXME: NOT working. Probably being overridden by the other one... May need to check the status down below when we update other peers...
+      document.getElementById('online-peers').innerHTML = '?'; // we are offline, so we don't know...
+      // TODO: call .off()?
     }
+  });
+
+  // listen for other PEER status changes
+  var onlinePeersRef = db.ref(`/sessions/${SESSION_KEY}/online-peers/`);
+
+  onlinePeersRef.on('value', snap => {
+    var onlinePeers = [];
+    snap.forEach(function(childSnapshot) {
+      var childKey = childSnapshot.key;
+      onlinePeers.push(childKey);
+    });
+
+    // update the DOM... FIXME: maybe add this to render...?
+    // or have render listen to a state update?
+    // FIXME: this should NOT live here...
+    document.getElementById('online-peers').innerHTML = onlinePeers;
   });
 }
 
