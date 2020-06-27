@@ -18,7 +18,6 @@ export function renderHTMLFromState(state) {}
 // maybe just always do 1?
 export function writeHtmlStrFromState(state, row) {
   var row = state.rows[0];
-  console.log('row', row);
 
   var str = '';
   // loop through chars and build html
@@ -40,8 +39,6 @@ export function writeHtmlStrFromState(state, row) {
     'javascript',
   );
 
-  console.log('str', str);
-  console.log('tokenized', tokenized);
   return tokenized;
 }
 
@@ -63,7 +60,7 @@ function getRowByIndex(i) {
 export function renderCaret(caretObj) {
   if (!caretObj) return;
   // find the char we need to insert caret after
-  console.log('caretObj', caretObj);
+  // console.log('caretObj', caretObj);
 
   // if we have no char as reference point, use caretObj.line as fallback and go to line=caretObj.line and charPos=0
   if (!caretObj.afterChar) {

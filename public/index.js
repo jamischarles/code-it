@@ -1,9 +1,15 @@
 import Prism from 'prismjs';
+// doesn't work if we don't do this...
+// FIXME: add an explicit INIT or something...
+import './firebase';
 import {
   saveCurrentEditorToState,
   generateSimpleOperationFromKeystroke,
   getState,
   subscribe,
+  mergeRemoteOperation,
+  getOpQueue,
+  flushOpQueue,
 } from './state';
 import {renderToDom, writeHtmlStrFromState, renderCaret} from './render';
 import {
@@ -114,7 +120,7 @@ editor.addEventListener('keydown', function(e) {
 // and TAB only works on keydown
 // if we use keydown, we run the code before the new key is added... Let's use keyup for now...
 editor.addEventListener('keyup', function(e) {
-  console.log('e key up', e);
+  // console.log('e key up', e);
   var key = e.keyCode;
   // if arrow keys, don't re-format
   // Also shift selection
@@ -144,15 +150,15 @@ editor.addEventListener('keyup', function(e) {
   // );
   // get current row
   var rowEl = getActiveRowEl();
-  console.log('rowEl', rowEl);
+  // console.log('rowEl', rowEl);
   // FIXME: this will likely need to be more than 1 row eventually, but for now  let's be naive...
   //
   var pos = saveCaretPos(rowEl);
   var wasUpdated = updateRowIfNeeded(rowEl);
 
   // if row was updated, we'll need to restore the caret position
-  console.log('wasUpdated', wasUpdated);
-  console.log('pos', pos);
+  // console.log('wasUpdated', wasUpdated);
+  // console.log('pos', pos);
   if (wasUpdated) {
     restoreCaretPos(rowEl, pos);
   }
@@ -180,73 +186,51 @@ function prepPayloadToSend(line, rowEl) {
 }
 
 // multiplayer functionality. Single player will go in prism_exp.js
-// Q: If we rapidly send 5 updates, will those 5 be pushed out to listening clients, or will some be dropped?
-function sendUpdate(contentToPush) {
-  // FIXME: store this in localstorage or in global window?
-  var currentSessionKey = window.location.hash.replace('#', '');
-
-  var updates = {};
-  updates[`/sessions/${currentSessionKey}/updates`] = contentToPush;
-
-  console.log('contentToPush', contentToPush);
-
-  // TODO: we must debounce these update DB writes somehow... Though websockets makes the network penalty much less looks like...
-  firebase
-    .database()
-    .ref()
-    // .set(updates);
-    .update(updates);
-  // Q: Diff between update and SET?
-  // https://medium.com/@jasonbyrne/closer-look-at-firebase-set-versus-update-eceff34d056b
-  //
-
-  // TODO: when we send a snapshot we can wipe out the updates arr...
-  // if it's just a stream can we just replace each one anyway? TODO: research how FB handles that...
-}
 
 // TODO: rename to 'processUpdate'?
-function receiveUpdate(obj) {
-  console.log('server updates sent', obj);
-  var rowsContainer = document.querySelector('#editor .rows');
-
-  var rowEl = rowsContainer.childNodes[obj.line];
-
-  // if it's a new row, we need to create new row...
-  if (!rowEl) {
-    // create new row
-    var rowEl = document.createElement('div');
-    rowEl.className = 'row';
-    rowsContainer.appendChild(rowEl);
-  }
-
-  applyRemoteUpdates(rowEl, obj.content);
-
-  // TODO: add some reconciliation logic...
-  // TODO: look at the multiplayer post for Excalidraw...
-  //
-}
+// TODO: NOT BEING USED. REMOVE
+// function receiveUpdate(obj) {
+//   console.log('server updates sent', obj);
+//   var rowsContainer = document.querySelector('#editor .rows');
+//
+//   var rowEl = rowsContainer.childNodes[obj.line];
+//
+//   // if it's a new row, we need to create new row...
+//   if (!rowEl) {
+//     // create new row
+//     var rowEl = document.createElement('div');
+//     rowEl.className = 'row';
+//     rowsContainer.appendChild(rowEl);
+//   }
+//
+//   applyRemoteUpdates(rowEl, obj.content);
+//
+//   // TODO: add some reconciliation logic...
+//   // TODO: look at the multiplayer post for Excalidraw...
+//   //
+// }
 
 // FIXME: can we combine / colocate this with updateRowIfNeeded()
 // Q: Why does location & taxonomy cause me so much stress while I'm just working out the bits? Fugly code should be fine at this stage...
-function applyRemoteUpdates(rowEl, newContent) {
-  var tokenized = Prism.highlight(
-    newContent,
-    Prism.languages.javascript,
-    'javascript',
-  );
-
-  // FIXME: improve this so we only touch innerHTML at the end? FIX this if we have lots of rows we need to tokenize at load...
-  // diff the row, and only update html if it's changed...
-  // ignore <br> with the diff, so "" is same as "<br>
-  if (rowEl.innerHTML.replace('<br>', '') !== tokenized) {
-    rowEl.innerHTML = tokenized;
-    console.log('Remote update applied');
-    return true; // updated
-  }
-
-  console.log('Remote update NOT applied');
-  return false; // not updated
-}
+// function applyRemoteUpdates(rowEl, newContent) {
+//   var tokenized = Prism.highlight(
+//     newContent,
+//     Prism.languages.javascript,
+//     'javascript',
+//   );
+//
+//   // FIXME: improve this so we only touch innerHTML at the end? FIX this if we have lots of rows we need to tokenize at load...
+//   // diff the row, and only update html if it's changed...
+//   // ignore <br> with the diff, so "" is same as "<br>
+//   if (rowEl.innerHTML.replace('<br>', '') !== tokenized) {
+//     rowEl.innerHTML = tokenized;
+//     console.log('Remote update applied');
+//     return true; // updated
+//   }
+//
+//   console.log('Remote update NOT applied');
+//   return false; // not updated
+// }
 
 // utils. TODO: move this somewhere else?
 function getActiveRowEl() {
@@ -341,7 +325,7 @@ function handleEnter(e) {
   function moveCursorToLineStart(div) {
     var sel = window.getSelection();
     var range = sel.getRangeAt(0);
-    console.log('range', range);
+    // console.log('range', range);
     // range.deleteContents(); // actually delete the html in the range... interesting... Could be useful after cloning it...
     range.setStart(div.childNodes[0] || div, 0);
     range.setEnd(div.childNodes[0], 0);
@@ -375,7 +359,7 @@ function handleBackspace() {
   // am I at POS 1 on any row other than 1
   var sel = window.getSelection();
   var range = sel.getRangeAt(0);
-  console.log('range', range);
+  // console.log('range', range);
   console.log('sel', sel);
   // do I NOT have text selected? (if I do, it's just a delete (default behavior)
   // collapsed
@@ -389,47 +373,6 @@ function removeRow() {}
 // TODO: move this somewhere else?
 // TODO: extract this into non-anon function
 // Firebase setup and listen for FB db updates...
-document.addEventListener('DOMContentLoaded', function() {
-  var config = {
-    apiKey: 'AIzaSyBAGaPPcu3kGWZLDj_u-UvFc8whXkUAdpoa', // authDomain: "code-it-228a1.firebaseapp.com",
-    databaseURL: 'https://code-it-228a1.firebaseio.com', // storageBucket: "bucket.appspot.com"
-  };
-
-  if (!firebase.apps.length) {
-    firebase.initializeApp(config);
-  } // Get a reference to the database service
-
-  var db = firebase.database();
-
-  var newSessionKey = window.location.hash.replace('#', '');
-
-  // if hash already exists, use that session. Else create a new one...
-  if (!newSessionKey) {
-    newSessionKey =
-      newSessionKey ||
-      db.ref('sessions').push({
-        startedAt: firebase.database.ServerValue.TIMESTAMP,
-      }).key;
-
-    console.log('newSessionKey', newSessionKey);
-
-    var updates = {};
-    updates['/sessions/' + newSessionKey] = {
-      content: 'function() {}', // starting info...
-      name: 'Anon', // timestamp: Date.now(),
-      startedAt: firebase.database.ServerValue.TIMESTAMP,
-    };
-
-    db.ref().update(updates);
-    window.location.hash = newSessionKey;
-  }
-
-  db.ref(`sessions/${newSessionKey}/updates`).on('value', snapshot => {
-    var obj = snapshot.val();
-
-    // receiveUpdate(obj);
-  });
-});
 
 // TODO: handle opposite shift
 // e.shiftKey=true
@@ -445,7 +388,7 @@ function init(rows) {
   // subscribe to state updates
   // Should this fire the first time?
   subscribe(state => {
-    console.log('***********UPDATE*************', state);
+    // console.log('***********UPDATE*************', state);
     // var rowEl = getActiveRowEl();
     // do we still need this here? or can we move this to state.js?
     // we should recalc where the cursor should be  after we perform an operation...
@@ -457,6 +400,7 @@ function init(rows) {
     // That way we can group it with a char that was just inserted, and it will move along with the chars. YES. That's how we should store caret pos in state...
     renderToDom(rows.children[0], writeHtmlStrFromState(state, 0));
     renderCaret();
+
     // console.log('restore:pos after render', pos);
     // restoreCaretPos(rowEl, pos);
 
@@ -467,8 +411,9 @@ function init(rows) {
 // or we can add a mutation observer? is that a good way to listen for initial population?
 // No. I'd rather fire some manual events...
 // At some point could could consider redux or xstate, but that's overkill right now...
+// TODO: DEAD CODE... REMOVE
 function highlightEachRow(rowsContainer) {
-  console.log('rowsContainer', rowsContainer.children);
+  // console.log('rowsContainer', rowsContainer.children);
   var rows = rowsContainer.children;
 
   // turn the html collection into an array
