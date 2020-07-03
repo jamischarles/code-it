@@ -1,6 +1,16 @@
 // this file is in charge of sending & receiving data...
 //
-import {mergeRemoteOperation, getOpQueue, flushOpQueue} from './state';
+import {
+  mergeRemoteOperation,
+  getOpQueue,
+  flushOpQueue,
+  getCharAtPosition,
+  updatePeerState,
+  getFirstLiveChar,
+  getState,
+} from './state';
+import {getActiveRowEl, saveCaretPos} from './prism_exp';
+import {renderPeerCarets} from './render';
 // FIXME: consider renaming it to something more generic...
 
 // TODO: consider using proxy values to listen to these for updates so we can then call init functions that rely on these...
@@ -78,7 +88,7 @@ export function sendUpdate(operation) {
   if (!operation.value) delete operation.value;
 
   operation.peer = PEER_ID;
-  console.log('operation.peer', operation.peer);
+  // console.log('operation.peer', operation.peer);
 
   delete operation.meta;
 
@@ -103,7 +113,7 @@ export function sendUpdate(operation) {
   var updates = {};
   updates[`/sessions/${currentSessionKey}/updates`] = contentToPush;
 
-  console.log('contentToPush', contentToPush);
+  // console.log('contentToPush', contentToPush);
 
   // TODO: we must debounce these update DB writes somehow... Though websockets makes the network penalty much less looks like...
   firebase
@@ -145,7 +155,7 @@ document.addEventListener('DOMContentLoaded', function() {
         startedAt: firebase.database.ServerValue.TIMESTAMP,
       }).key;
 
-    console.log('newSessionKey', newSessionKey);
+    // console.log('newSessionKey', newSessionKey);
 
     var updates = {};
     updates['/sessions/' + newSessionKey] = {
@@ -228,12 +238,12 @@ function setMyPeerID() {
   // // We need to handle that use case...
   //
   // db.ref().update(updates);
-  console.log('SESSION_KEY', SESSION_KEY);
+  // console.log('SESSION_KEY', SESSION_KEY);
 
   var peersRef = db.ref(`/sessions/${SESSION_KEY}/peers`);
   peersRef.transaction(
     function(currentData) {
-      console.log('currentData', currentData);
+      // console.log('currentData', currentData);
       // if data hasn't been fetched yet, just return the null, so it will retry
       if (currentData === null) return currentData;
 
@@ -362,18 +372,102 @@ function afterDbIsReady() {
   // listen for other PEER status changes
   var onlinePeersRef = db.ref(`/sessions/${SESSION_KEY}/online-peers/`);
 
+  // FIXME: this will probably fire when caret pos changes...
+  // instead I should listen to childRemoved or childAdded
   onlinePeersRef.on('value', snap => {
+    // console.log('onlinePeers status changed...');
     var onlinePeers = [];
+    var onlinePeersObjects = [];
     snap.forEach(function(childSnapshot) {
       var childKey = childSnapshot.key;
+      var childVal = childSnapshot.val();
       onlinePeers.push(childKey);
+
+      // FIXME: clean up this confusing logic...
+      onlinePeersObjects.push(
+        Object.assign({}, childVal, {
+          peerId: childKey,
+        }),
+      );
     });
 
     // update the DOM... FIXME: maybe add this to render...?
     // or have render listen to a state update?
     // FIXME: this should NOT live here...
+    // PUT THis in state, and then render from state in render instead...
     document.getElementById('online-peers').innerHTML = onlinePeers;
+
+    updatePeerState(onlinePeersObjects);
   });
+
+  // listen for caret change and send update to FB
+  // FIXME: consider throttling it...
+  // send the charID that it's at... That way the other app can render it based on the local position of that char. YES.
+  // Caret should be sticky to the char that it's resting on...
+  //
+  // Q: How do I get the charID from the caret?
+  //    - get line:pos
+  //    - rows[line][pos].charId
+  //    saveCaretPos()
+  //
+  // that is really what we should store in state...?
+  // does that work with empty spaces? For now just keep the current state...
+  // TODO: see how this works when we're on an empty space...
+  // If it's empty we can use offset?
+  document.addEventListener('selectionchange', e => {
+    // console.log('selection changed!', document.getSelection());
+    // TODO: debounce the execution of this...
+    var rowEl = getActiveRowEl();
+    var pos = saveCaretPos(rowEl);
+    // line:pos...
+    // console.log('#99) pos', pos);
+    var t = getCharAtPosition(pos);
+    var id = t && t.id;
+
+    // if there's no char, assume beginning of line... Grab the first live char, and store that...
+    if (!t) {
+      // if there's no char, pass the rowID
+      // OR can we pass a special prefix that says BEFORE this char?
+      // FIXME: ^ is what we'll need to do if we get weird caret bugs at beginning of the line...
+      // bc we ALWAYS need to be sticky to a char...
+      //   t = getFirstLiveChar();
+      //   id = t && t.id;
+    }
+
+    // FIXME: how can I signify END OF LINE? or START OF LINE? does it make sense to just have a placeholder char for EOL?
+    // like $$? that could be interesting... maybe I can store $$ as EOL...?
+    // Is that a hacky workaround? or is there a better solution?
+    // Q: Why does the manual caretRender work, but not the peerRender?
+    // That's really the problem I need to solve. Converge the methods I use... YES
+
+    // console.log('sc:-------------------');
+    // console.log('sc:rowEl', rowEl);
+    // console.log('sc:pos', pos);
+    // console.log('sc:t', t);
+    // console.log('sc:charPos', t.pos);
+    // console.log('sc:state', getState().rows);
+
+    if (!id) return;
+
+    // FIXME: should we store this on peers/caret instead? Will tihs mess with the online status? Shouldn't...
+    // console.log('SESSION_KEY', SESSION_KEY);
+    // console.log('PEER_ID', PEER_ID);
+    var peerRef = db.ref(`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}`);
+
+    // We're connected (or reconnected)! Do anything here that should happen only if online (or on reconnect)
+    // var con = myConnectionsRef.push({id: '5', onilne: 'hi'});
+    //
+    var updates = {};
+    updates[`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/caret`] = id;
+    db.ref().update(updates);
+
+    // FIXME: remove...
+    // renderPeerCarets();
+
+    // TODO: we must debounce these update DB writes somehow... Though websockets makes the network penalty much less looks like...
+  });
+
+  // LISTEN for peer caret position changes... (debounce this?) Q:Can we tell FB to throttle?
 }
 
 // subscribe to pos change?

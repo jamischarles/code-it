@@ -36,6 +36,23 @@ export function updateRowIfNeeded(rowEl) {
   return false; // not updated
 }
 
+export function getActiveRowEl() {
+  // get caret
+  var sel = window.getSelection();
+  var rowEl;
+
+  // current textNode at cursor (works unless row is blank. Then it can be at a elNode
+  var aNode = sel.anchorNode;
+  // if you are a textNode
+  if (aNode.nodeType === 3) {
+    rowEl = aNode.parentNode.closest('.row');
+  } else {
+    rowEl = aNode.closest('.row');
+  }
+
+  return rowEl;
+}
+
 // should we update the innerHTML? If yes, update it, and save/restore caret.
 // FIXME: turn this into a line by line diff to see what's dirty and what's clean... Similar to vDom dirty checks...
 export function updateEditorWithNewCode(newRawCode) {
@@ -183,6 +200,8 @@ export function saveCaretPos(rowEl) {
 // we'll use the current row as the starting point now...
 // So we don't even need the rowNum for the time being...
 export function restoreCaretPos(rowEl, charPosition) {
+  if (!rowEl) throw new Error('PLEASE PASS A rowEl PARAM!!!');
+
   // var node = posObject.node;
   // var anchorOffset = posObject.offset;
 
@@ -217,6 +236,24 @@ export function restoreCaretPos(rowEl, charPosition) {
   sel.addRange(range);
 
   // todo try the setandextend...?
+}
+
+// return a range obj from pos obj
+export function getRangeFromPosition(rowEl, charPosition) {
+  if (!rowEl) throw new Error('PLEASE PASS A rowEl PARAM!!!');
+
+  // debugger;
+  var result = findNodeFromCharPos(rowEl, charPosition);
+
+  // fallback. if no node is found, use the rowEl node. happens in rare cases like when you have 1 char, and you delete it.
+  var node = (result && result.node) || rowEl;
+  var offset = (result && result.offset) || 0;
+
+  var range = document.createRange();
+  range.setStart(node, offset); // works pretty well too. Maybe even better on brackets...
+  range.collapse(true);
+
+  return range;
 }
 
 // todo: return offset as well...

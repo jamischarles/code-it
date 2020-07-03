@@ -3,6 +3,8 @@
  * Learning: All my work with redux and react ideally positions me to work on this, or at least to solve it using these patterns...
  */
 
+// TODO: consider using a proxy obj to listen for state changes on state obj and see which nodes change so yuo can listen to just those...
+
 // BUGS TO FIX:
 // [ ]cmd backspace doesn't work... properly...
 // Q:can we take some of these more complex UI actions and just listen for it?
@@ -34,7 +36,7 @@ import {PEER_ID} from './firebase';
 // We just need consistent ordering. Do we get that with obj? We do NOT. Obj does NOT guarantee key order...
 var state = {
   rows: [[]], // each row will eventually probably need an ID so we can track and tombstone it as well...
-  carets: [],
+  peers: [],
   // let's punt until we need  that...
   // rows: [[{value: 'f', id: 'a1'}, {value: 'u', id: 'a2'}]],
 };
@@ -50,6 +52,7 @@ var history = [];
 
 // functions that will listen and fire...
 var subscribers = [];
+var peerSubscribers = []; // only listen to state.peers changes
 
 // queue of operations to be sent
 // FIXME: do we need this?
@@ -69,6 +72,20 @@ export function subscribe(fn) {
 function callSubscribers() {
   subscribers.forEach(fn => {
     fn(state);
+  });
+}
+
+// FIXME: make this more automagical
+// listens just to state.peers changes...
+export function subscribeToPeers(fn) {
+  peerSubscribers.push(fn);
+}
+
+function callPeerSubscribers() {
+  // console.log('calling Peers subs', state.peers);
+  peerSubscribers.forEach(fn => {
+    // console.log('fn', fn);
+    fn(state.peers);
   });
 }
 
@@ -101,8 +118,42 @@ function genCharId(remoteID) {
   return PEER_ID + '|' + count;
 }
 
+// these are all util functions... consider moving them to a utils file...
+export function getCharById(charId) {
+  return charsById[charId];
+}
+
 // pass in whatever thing we need wether it's ID or position...
-function getCharAtPosition() {}
+export function getCharAtPosition(pos) {
+  var line = pos.line;
+  var charP = pos.charPosition;
+
+  // ignore tombstoned chars
+  var liveCharsOnRow = state.rows[line].filter(x => !x.tombstone);
+  // FIXME: make this a fn so we can just return the live rows...
+  var afterChar = liveCharsOnRow[charP - 1];
+
+  // we want to show the char we want to render AFTER.
+  // That means we need to account for thtat in the rendering logic...
+  // This is generally how we handle caret rendering logic.
+  // if there's no char assume beginning of line
+
+  return afterChar;
+}
+
+// returns the first live el
+// if nothing returned, assume there are no live chars
+export function getFirstLiveChar(lineNum) {
+  var firstLiveChar = state.rows[lineNum].find(x => !x.tombstone);
+  return firstLiveChar;
+}
+
+// returns the row obj...
+// FIXME: add IDs to rows so we can easily grab by refs...
+// or we should just store a JS ref to the live nodes...
+// export function getRowFromLineNum(rowNum) {
+//   return state.rows[rowNum];
+// }
 
 // TODO: consider storing the line & pos with the char...
 export function getPositionFromChar(id) {}
@@ -245,8 +296,8 @@ function updateState(op, isRemoteOp) {
     // newRow.push(newChar);
 
     if (charsById[insertionID]) {
-      console.log('Blocking dupe insertion1: ', op);
-      console.log('Blocking dupe insertion2: ', newChar);
+      // console.log('Blocking dupe insertion1: ', op);
+      // console.log('Blocking dupe insertion2: ', newChar);
       // warn about duplicate insertion about to happen
       debugger;
       return;
@@ -355,23 +406,24 @@ function updateState(op, isRemoteOp) {
   state = {
     ...state,
     rows: [newRow], // always add a new row item after update...
-    carets: [caret],
+    carets: [caret], //FIXME Change this since this will only be used for the OWN caret...
   };
 
-  console.log('state', state.rows[0]);
+  // console.log('state:charsById', charsById);
+  // console.log('state', state.rows[0]);
 
   // save the operation we just applied into the opqueue so we can send it to others...
   // IF not remote operation, then push it to opQueue
-  console.log('isRemoteOp', isRemoteOp);
+  // console.log('isRemoteOp', isRemoteOp);
   if (!isRemoteOp) {
     // attach the ID of the el just inserted to the OP so we can send it to other peers
     // charId is the ID of the char which is assigned at insertion / creation so we have a unique ID for each char ever created
     op.charId = op.charId || insertionID; // naive assumption: only time op.charId will be missing is when we
     opQueue.push(op);
-    console.log('OP Inserted to Queue:', op);
+    // console.log('OP Inserted to Queue:', op);
   }
 
-  console.log('opQueue', opQueue);
+  // console.log('opQueue', opQueue);
   // TODO: see  if we can  batch all this somehow? Maybe with throttle, or debounce?
   callSubscribers();
 }
@@ -593,3 +645,13 @@ export function saveCurrentEditorToState(editorNode) {
 function diffSnapshots(a, b) {}
 
 function generateOperationsFromDiff() {}
+
+// peer functions...
+export function updatePeerState(newState) {
+  // got this directly from FB
+  state.peers = newState;
+  // state.peers.online[c50].caret
+
+  console.log('STATE: peer state updated!:', state.peers);
+  callPeerSubscribers();
+}

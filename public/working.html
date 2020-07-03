@@ -75,6 +75,18 @@ code[class*="language-"] {
   <div class="parent">
     <div><strong>Peers online</strong>: <span id="online-peers"></span> </div>
     <div><strong>Status</strong>: <span id="online-status"></span> </div>
+<style>.peer-caret{
+
+/* TODO: figure out how to swap the colors... */
+  background-color: red;
+  display: block;
+  height: 18px;
+  position: absolute;
+  opacity: .5;
+  width: 1px;
+}
+</style>
+    <div id="carets"><span id="caret-one" class="caret"></span></div>
 
     <pre class="language-javascript"><code id="editor" class="editor language-javascript" contenteditable="true"><div class="rows"><div class="row">function(){} </div></div></code></pre>
 

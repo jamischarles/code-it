@@ -7,11 +7,17 @@ import {
   generateSimpleOperationFromKeystroke,
   getState,
   subscribe,
+  subscribeToPeers,
   mergeRemoteOperation,
   getOpQueue,
   flushOpQueue,
 } from './state';
-import {renderToDom, writeHtmlStrFromState, renderCaret} from './render';
+import {
+  renderToDom,
+  writeHtmlStrFromState,
+  renderOwnCaret,
+  renderPeerCarets,
+} from './render';
 import {
   updateRowIfNeeded,
   saveCaretPos,
@@ -108,7 +114,7 @@ editor.addEventListener('keydown', function(e) {
   // for all other mutative actions, catch them, and update in state before updating the UI
   e.preventDefault();
   generateSimpleOperationFromKeystroke(e, pos);
-  renderCaret(getState().carets[0]);
+  renderOwnCaret(getState().carets[0]); // FIXME: DO we need this?
   // var state = getState();
   // console.log('state', state);
   // writeHtmlStrFromState(state);
@@ -399,12 +405,22 @@ function init(rows) {
     // We don't need operations to move caret, but can be a simple replace. pos=5:3. Should it be based on charID as well? I think so...
     // That way we can group it with a char that was just inserted, and it will move along with the chars. YES. That's how we should store caret pos in state...
     renderToDom(rows.children[0], writeHtmlStrFromState(state, 0));
-    renderCaret();
+    renderOwnCaret();
 
     // console.log('restore:pos after render', pos);
     // restoreCaretPos(rowEl, pos);
 
     // renderCarets(state.carets);
+  });
+
+  // subscribe to peer updates so we can render carets
+  subscribeToPeers(() => {
+    var peerState = getState().peers;
+    console.log(
+      'state:subscribe to peer updates. Render next: peerState',
+      peerState,
+    );
+    renderPeerCarets(peerState);
   });
 }
 
