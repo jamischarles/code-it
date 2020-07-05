@@ -1,4 +1,6 @@
 // responsible for generating HMTL, rendering UI etc...
+// vDom stuff will be here as well
+// and we'll keep track and provide utils that involve the dom...
 import Prism from 'prismjs';
 
 import {
@@ -6,10 +8,25 @@ import {
   getRangeFromPosition,
   getActiveRowEl,
 } from './prism_exp';
-import {PEER_ID} from './firebase';
+import {getSelfPeerId} from './firebase';
 import {getCharById, getState} from './state';
 //
 //
+//
+
+// this will allow us to do the following:
+// - keep track of position by charID in the dom (where each char has been inserted)
+// - vDom stuff. Old vs new row content so we can see where and how to inserts content
+var renderCache = [];
+
+var posCacheById = {};
+
+export function getPositionFromCharId(charId) {
+  // implementation details... Subject to change later...
+  //
+  // For now let's use the liveContent in state
+  return posCacheById[charId] && posCacheById[charId].pos;
+}
 
 // str data structure?
 // html data structure? Do we even need to save the html? Might be nice...
@@ -22,34 +39,101 @@ export function renderHTMLFromState(state) {}
 
 // request a row (returns str) or no row, returns array of strings
 // maybe just always do 1?
+// FIXME: add some vDom diffing either here, or in renderToDom
+// FIXME: consider adding dirty checks for tokenizing so we don't have to do that unecessarily...
+// FIXME: later we can check for perf bottlenecks...
+// TODO: Do a write up for how to do that easily and quickly and publish it...
+// returns  ['row1Content', 'row2Coentent'] etc
+// FIXME: can we simplify this... esp the row and line counting logic?
 export function writeHtmlStrFromState(state, row) {
-  var row = state.rows[0];
+  console.log('##state', state);
 
-  var str = '';
-  // loop through chars and build html
-  row.forEach(item => {
-    // don't render tombstoned items
-    if (!item.tombstone) {
-      str += item.value || '';
+  posCacheById = {}; // reset position cache
+  var rows = [];
+
+  // get ALL the content
+  var content = state.liveContent;
+
+  // buffer all the content for the current row
+  var currentRowStr = '';
+  var lineCounter = 0; // which row are we on?
+  var posCounter = 0; //on current row
+
+  for (var i = 0; i < content.length; i++) {
+    var char = content[i];
+    var val = char.value;
+
+    // save off current char to posCache so we can easily retrieve position later
+    posCacheById[char.id] = content[i];
+    posCacheById[char.id].pos = {line: lineCounter, charPosition: posCounter};
+
+    // if we encounter a new line, flush the buffer to array
+    if (val === '\n') {
+      if (currentRowStr === '') {
+        // if row is empty, then add <br> tag so the line can hold a caret in the UI
+        currentRowStr = '<br>';
+      }
+
+      rows.push(tokenize(currentRowStr));
+      currentRowStr = '';
+      lineCounter++;
+      posCounter = 0; // reset pos counter
+      continue;
     }
-  });
 
-  // if emptry str for the line, just add <br> tag so line can hold a caret.
-  if (str === '') {
-    return '<br>';
+    currentRowStr += val;
+    posCounter++;
   }
 
-  var tokenized = Prism.highlight(
-    str,
-    Prism.languages.javascript,
-    'javascript',
-  );
+  // for (var i = 0; i < content.length; i++) {
+  //   var row = contentByRows[i];
+  //
+  //   var str = '';
+  //   // loop through chars and build html
+  //   row.forEach(item => {
+  //     str += item.value; // || '';
+  //   });
+  //
+  //   // if emptry str for the line, just add <br> tag so line can hold a caret.
+  //   if (str === '') {
+  //     return '<br>';
+  //   }
+  //
+  //   var tokenizedStr = Prism.highlight(
+  //     str,
+  //     Prism.languages.javascript,
+  //     'javascript',
+  //   );
+  // }
 
-  return tokenized;
+  // if there's text left in the buffer (like on last row) make sure we add that
+  if (currentRowStr.length > 0) {
+    rows.push(tokenize(currentRowStr));
+  }
+
+  // if no rows, and no content, add a <br> so we can focus the caret in the editor
+  if (rows.length === 0) {
+    rows.push('<br>');
+  }
+
+  return rows;
 }
 
-export function renderToDom(node, html) {
-  // debugger;
+// turn raw html into code
+function tokenize(str) {
+  // tokenize the current row content...
+  return Prism.highlight(str, Prism.languages.javascript, 'javascript');
+}
+
+// FIXME: add some vDom diffing either here, or in renderToDom
+// Do that after we have multi rows working...
+export function renderToDom(node, htmlRows) {
+  console.log('##renderToDom: node', node);
+  console.log('##renderToDom: html', htmlRows);
+  var html = '';
+  htmlRows.forEach(rowContent => {
+    html += `<div class="row">${rowContent}</div>`;
+  });
   node.innerHTML = html;
 }
 
@@ -68,14 +152,26 @@ function getRowByIndex(i) {
 
 // this is called after chars are modified in some way
 // arrrow keys currently aren't being used for this...
-export function renderOwnCaret(caretObj) {
+export function renderOwnCaret() {
+  var pos;
+
+  // FIXME: store this under state.self...? maybe we could store self_ID there and caret and similar...
+  var caretObj = getState().caret;
   if (!caretObj) return;
   // find the char we need to insert caret after
   // console.log('caretObj', caretObj);
 
+  // we either need position, or a charID...
+  if (caretObj.afterChar) {
+    pos = getPositionFromCharId(caretObj.afterChar.id);
+  } else {
+    // if there's no afterChar, assume we are at very beginning of editor
+    pos = {line: 0, charPosition: 0};
+  }
+
   // if we have no char as reference point, use caretObj.line as fallback and go to line=caretObj.line and charPos=0
   if (!caretObj.afterChar) {
-    var row = getRowByIndex(caretObj.line);
+    var row = getRowByIndex(pos.line);
     return restoreCaretPos(row, 0);
   }
 
@@ -110,7 +206,7 @@ export function renderPeerCarets(peerState) {
     if (!char) return;
 
     // don't render peer caret for myself. Only carets for other peers
-    if (PEER_ID === peer.peerId) return;
+    if (getSelfPeerId() === peer.peerId) return;
 
     var caretEl = createPeerCaretHTML(peer.peerId, char.pos, i);
 

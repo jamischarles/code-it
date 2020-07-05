@@ -15,7 +15,9 @@ import {renderPeerCarets} from './render';
 
 // TODO: consider using proxy values to listen to these for updates so we can then call init functions that rely on these...
 export var db;
-export let PEER_ID;
+// we cannot export this, because we'll run into race conditions if this isn't set when it's exported. That's why we need to export a getter instead...
+// That would also allow us to observe this value with a proxy if we needed to...
+let PEER_ID;
 export let SESSION_KEY;
 
 // FIXME: eventually make this an array... we could just split this for the lazy man... But just once...
@@ -53,6 +55,10 @@ export let SESSION_KEY;
 // every second send the queue if anything is in it
 setInterval(sendOpQueue, 1000);
 
+export function getSelfPeerId() {
+  return PEER_ID;
+}
+
 //
 // send operations to the server
 // Q: If we rapidly send 5 updates, will those 5 be pushed out to listening clients, or will some be dropped?
@@ -82,7 +88,8 @@ export function sendUpdate(operation) {
   // If one person types "Hello" while the other person writes something else, we really want to instert "insert(a1, hello)" instead of breaking
   // up the chars...
   // how it's broken up will depend on what events come in from the other peers...
-  if (typeof operation.insertAt === 'undefined') delete operation.insertAt;
+  if (typeof operation.insertAfter === 'undefined')
+    delete operation.insertAfter;
   if (typeof operation.charId === 'undefined') delete operation.charId;
 
   if (!operation.value) delete operation.value;

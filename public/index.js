@@ -23,6 +23,7 @@ import {
   saveCaretPos,
   restoreCaretPos,
   getEditorCode,
+  getActiveRowEl,
 } from './prism_exp';
 import './listeners'; // intiialize the listeners... FIXME: Make this explicit, or add it on page, or something...
 
@@ -91,7 +92,12 @@ editor.addEventListener('keydown', function(e) {
 
   // get the position BEFORE the change is made...
   var rowEl = getActiveRowEl();
-  var pos = saveCaretPos(rowEl);
+  if (rowEl) {
+    var pos = saveCaretPos(rowEl);
+  } else {
+    console.log('warning index.js: expected rowEl but couldn\t get it...');
+    pos = {line: 0, charPosition: 0}; // hacky override?
+  }
 
   // if (key === TAB) handleTab(e);
   // Let's leave this off until we need it... When we do use <br> tags for linebreaks... consistently
@@ -114,7 +120,7 @@ editor.addEventListener('keydown', function(e) {
   // for all other mutative actions, catch them, and update in state before updating the UI
   e.preventDefault();
   generateSimpleOperationFromKeystroke(e, pos);
-  renderOwnCaret(getState().carets[0]); // FIXME: DO we need this?
+  // renderOwnCaret(getState().carets[0]); // FIXME: DO we need this?
   // var state = getState();
   // console.log('state', state);
   // writeHtmlStrFromState(state);
@@ -155,19 +161,19 @@ editor.addEventListener('keyup', function(e) {
   //
   // );
   // get current row
-  var rowEl = getActiveRowEl();
+  // var rowEl = getActiveRowEl();
   // console.log('rowEl', rowEl);
   // FIXME: this will likely need to be more than 1 row eventually, but for now  let's be naive...
   //
-  var pos = saveCaretPos(rowEl);
-  var wasUpdated = updateRowIfNeeded(rowEl);
+  // var pos = saveCaretPos(rowEl);
+  // var wasUpdated = updateRowIfNeeded(rowEl);
 
   // if row was updated, we'll need to restore the caret position
   // console.log('wasUpdated', wasUpdated);
   // console.log('pos', pos);
-  if (wasUpdated) {
-    restoreCaretPos(rowEl, pos);
-  }
+  // if (wasUpdated) {
+  //   restoreCaretPos(rowEl, pos);
+  // }
 
   // TODO Make this switch statement
   // Prism.highlightElement(editor, false, function() {
@@ -180,9 +186,9 @@ editor.addEventListener('keyup', function(e) {
   // Push to FB
   // var currentSessionKey = '01';
   // send only the current row across the wire
-  var payload = prepPayloadToSend(pos.line, rowEl);
+  // var payload = prepPayloadToSend(pos.line, rowEl);
 
-  saveCurrentEditorToState(editor);
+  // saveCurrentEditorToState(editor);
   // sendUpdate(payload);
 });
 
@@ -239,22 +245,6 @@ function prepPayloadToSend(line, rowEl) {
 // }
 
 // utils. TODO: move this somewhere else?
-function getActiveRowEl() {
-  // get caret
-  var sel = window.getSelection();
-  var rowEl;
-
-  // current textNode at cursor (works unless row is blank. Then it can be at a elNode
-  var aNode = sel.anchorNode;
-  // if you are a textNode
-  if (aNode.nodeType === 3) {
-    rowEl = aNode.parentNode.closest('.row');
-  } else {
-    rowEl = aNode.closest('.row');
-  }
-
-  return rowEl;
-}
 
 // listen for special keys...
 //https://stackoverflow.com/questions/4604930/changing-the-keypress
@@ -387,24 +377,25 @@ function removeRow() {}
 // TODO: call this at the correct time...
 // FIXME: consider using a simple hooks / pub sub system?
 // FIXME: do we want to highlight before we fetch the code from firebase? We'll have to see about cost. For now, yes...
-function init(rows) {
+function init(rowsContainerEl) {
   // highlightEachRow(rows);
-  renderToDom(rows.children[0], writeHtmlStrFromState(getState(), 0));
+  renderToDom(rowsContainerEl, writeHtmlStrFromState(getState()));
 
   // subscribe to state updates
   // Should this fire the first time?
   subscribe(state => {
     // console.log('***********UPDATE*************', state);
-    // var rowEl = getActiveRowEl();
     // do we still need this here? or can we move this to state.js?
     // we should recalc where the cursor should be  after we perform an operation...
     //
+    // var rowEl = getActiveRowEl();
     // var pos = saveCaretPos(rowEl);
     // console.log('save:pos before render', pos);
     // Q: How do we calculate the new insertion point? Should state save and tell use what the new pos should be? Yes. State should store the pos.
     // We don't need operations to move caret, but can be a simple replace. pos=5:3. Should it be based on charID as well? I think so...
     // That way we can group it with a char that was just inserted, and it will move along with the chars. YES. That's how we should store caret pos in state...
-    renderToDom(rows.children[0], writeHtmlStrFromState(state, 0));
+    renderToDom(rowsContainerEl, writeHtmlStrFromState(getState()));
+    // debugger;
     renderOwnCaret();
 
     // console.log('restore:pos after render', pos);
@@ -428,25 +419,25 @@ function init(rows) {
 // No. I'd rather fire some manual events...
 // At some point could could consider redux or xstate, but that's overkill right now...
 // TODO: DEAD CODE... REMOVE
-function highlightEachRow(rowsContainer) {
-  // console.log('rowsContainer', rowsContainer.children);
-  var rows = rowsContainer.children;
-
-  // turn the html collection into an array
-  Array.from(rows).forEach(rowEl => {
-    var tokenized = Prism.highlight(
-      rowEl.textContent,
-      Prism.languages.javascript,
-      'javascript',
-    );
-
-    // FIXME: improve this so we only touch innerHTML at the end? FIX this if we have lots of rows we need to tokenize at load...
-    // diff the row, and only update html if it's changed...
-    if (rowEl.innerHTML !== tokenized) {
-      rowEl.innerHTML = tokenized;
-    }
-  });
-}
+// function highlightEachRow(rowsContainer) {
+//   // console.log('rowsContainer', rowsContainer.children);
+//   var rows = rowsContainer.children;
+//
+//   // turn the html collection into an array
+//   Array.from(rows).forEach(rowEl => {
+//     var tokenized = Prism.highlight(
+//       rowEl.textContent,
+//       Prism.languages.javascript,
+//       'javascript',
+//     );
+//
+//     // FIXME: improve this so we only touch innerHTML at the end? FIX this if we have lots of rows we need to tokenize at load...
+//     // diff the row, and only update html if it's changed...
+//     if (rowEl.innerHTML !== tokenized) {
+//       rowEl.innerHTML = tokenized;
+//     }
+//   });
+// }
 
 var rowsContainer = document.querySelector('#editor .rows');
 

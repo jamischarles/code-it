@@ -26,8 +26,8 @@
 var initPhase = true;
 setTimeout(() => (initPhase = false), 2000);
 
-import {getCharPosFromSelectionObj} from './prism_exp';
-import {PEER_ID} from './firebase';
+import {getCharPosFromSelectionObj, getActiveRowEl} from './prism_exp';
+import {getSelfPeerId} from './firebase';
 
 // state starts as empty...
 // var state = {};
@@ -35,8 +35,11 @@ import {PEER_ID} from './firebase';
 // TODO: consider using lodash.uniq with for enforcing unique keys, or we can just an obj instead...
 // We just need consistent ordering. Do we get that with obj? We do NOT. Obj does NOT guarantee key order...
 var state = {
-  rows: [[]], // each row will eventually probably need an ID so we can track and tombstone it as well...
+  // rows: [[]], // each row will eventually probably need an ID so we can track and tombstone it as well...
+  content: [], //including tombstoned items
+  liveContent: [], //no tombstoned items
   peers: [],
+  // caret: {},
   // let's punt until we need  that...
   // rows: [[{value: 'f', id: 'a1'}, {value: 'u', id: 'a2'}]],
 };
@@ -115,7 +118,7 @@ function genCharId(remoteID) {
   }
 
   var count = charCounter++;
-  return PEER_ID + '|' + count;
+  return getSelfPeerId() + '|' + count;
 }
 
 // these are all util functions... consider moving them to a utils file...
@@ -127,6 +130,12 @@ export function getCharById(charId) {
 export function getCharAtPosition(pos) {
   var line = pos.line;
   var charP = pos.charPosition;
+
+  // FIXME: we should have a vDom cache where we store the rows?... Just so we can get the char by id...
+  // FIXME: how will  we get row from this? Doesn't make sense to manually split it every time...
+  //
+  var afterChar = state.liveContent[charP - 1];
+  return afterChar;
 
   // ignore tombstoned chars
   var liveCharsOnRow = state.rows[line].filter(x => !x.tombstone);
@@ -249,6 +258,7 @@ function getSelectionRangeBoundaries() {
 // typing at end of line should use the last char as marker, and not END of line...
 // if it's a remote op, don't add it to the opQueue... (causes infinite loop)
 function updateState(op, isRemoteOp) {
+  debugger;
   // console.log('####updateState:', op);
 
   // FIXME get this from charID if possible later...
@@ -256,14 +266,13 @@ function updateState(op, isRemoteOp) {
   // TODO: have reparate counter for rows, but start it with r. eg: ra1
   // var row = op.meta.row;
 
-  var {type, at, value} = op;
+  var {type, value} = op;
 
   // loop through the row...
   // TODO: consider having separate fn for each row we process...
-  var currentRowIndex = 0;
-  var currentRow = state.rows[currentRowIndex];
-  // var newRow = [];
   var insertionID;
+  var content = [];
+  var liveContent = [];
 
   // inserting by relative charID is the key to having this op be commutative (WIN)
   // and if we check if the id has been inserted we get idempotency (WIN)
@@ -286,20 +295,12 @@ function updateState(op, isRemoteOp) {
     var newChar = {
       value,
       id: insertionID,
-      // FIXME: consider storing just line here, because charPosition will become stale as soon as another insert happens
-      // TODO: remove charPosition because that'll become stale as soon as there's another insertion...
-      // Will we have the same problem with lines? Probably... TODO: Fix that later...
-      pos: {line: currentRowIndex, charPosition: 0}, // default to 0. Will be updated later.
     };
 
     // insert new char
     // newRow.push(newChar);
 
     if (charsById[insertionID]) {
-      // console.log('Blocking dupe insertion1: ', op);
-      // console.log('Blocking dupe insertion2: ', newChar);
-      // warn about duplicate insertion about to happen
-      debugger;
       return;
     }
     charsById[insertionID] = newChar;
@@ -320,53 +321,42 @@ function updateState(op, isRemoteOp) {
       delete char.pos; // no position since char is now dead
     });
 
-    // currentRow[index].tombstone = true;
-    // delete currentRow[index].pos; // no position since char is now dead
-
-    // TODO: we need to find the char where the caret should be now... Previous sibling to tombstoned char...
-    // var item = currentRow[index];
-    // debugger;
-
-    // find the first char so we'll know where to place the caret
-    var index = currentRow.findIndex(el => el.id === op.deleteChars[0]);
+    // find the first char marked for deletion so we'll know where to place the caret
+    // FIXME: Handle logic here for "findCaretPos  after deletion"
+    var index = state.liveContent.findIndex(el => el.id === op.deleteChars[0]);
 
     var j = index;
     while (j > -1) {
-      var focusedItem = currentRow[j];
+      var focusedItem = state.liveContent[j];
       if (!focusedItem.tombstone) break;
       j--;
       // console.log('while');
     }
     if (focusedItem.tombstone) focusedItem = undefined;
+
+    // TODO: rip the deleted item out and replace the liveContent array...
   }
 
-  // loop through whole row
-  var newRow = [];
-  var liveCharCounter = 0; // count only live chars that haven't been tombstoned
-
-  // if there's no char at, it means it's the first char that needs to be inserted
-  if (op.type === 'insert' && !op.insertAt) {
-    newChar.pos.charPosition = liveCharCounter;
-    newRow.push(newChar);
-    liveCharCounter++;
+  // if there's no char after, it means it's the first char in the editor
+  if (op.type === 'insert' && !op.insertAfter) {
+    content.push(newChar);
+    liveContent.push(newChar);
   }
 
   // single loop should be better for perf than alternatives
-  for (var i = 0; i < currentRow.length; i++) {
-    var curChar = currentRow[i];
+  for (var i = 0; i < state.content.length; i++) {
+    var curChar = state.content[i];
     if (!curChar.tombstone) {
-      curChar.pos.charPosition = liveCharCounter; // update position of existing char (discounting any tombstoned chars)
-      liveCharCounter++;
+      liveContent.push(curChar);
     }
 
-    newRow.push(curChar);
+    content.push(curChar);
 
     // find el AFTER which to insert new char
-    if (curChar.id === op.insertAt && op.type === 'insert') {
+    if (curChar.id === op.insertAfter && op.type === 'insert') {
       // insert the new char
-      newChar.pos.charPosition = liveCharCounter;
-      newRow.push(newChar);
-      liveCharCounter++; // increment live counter after insertion
+      content.push(newChar);
+      liveContent.push(newChar);
     }
   }
 
@@ -397,16 +387,23 @@ function updateState(op, isRemoteOp) {
 
   // update the new caret position
   var caret = {
-    client: PEER_ID,
-    after: insertionID || op.at, // FIXME: this will cause bugs when sent to other peers. esp for delete...
+    client: getSelfPeerId(),
+    after: insertionID || op.after, // FIXME: this will cause bugs when sent to other peers. esp for delete...
     afterChar: newChar || focusedItem, // FIXME: need better new name for nowHaveCaret here
-    line: currentRowIndex, // FIXME: Try to remove? Need this as a fallback when we don't have a char (empty line)
+    // line: currentRowIndex, // FIXME: Try to remove? Need this as a fallback when we don't have a char (empty line)
   };
+
+  console.log('caret', caret);
+
+  // FIXME: move this up higher in this function and make it more efficient?, but this works for now...
+  // var liveContent = content.filter(x => !x.tombstone);
 
   state = {
     ...state,
-    rows: [newRow], // always add a new row item after update...
-    carets: [caret], //FIXME Change this since this will only be used for the OWN caret...
+    content,
+    liveContent,
+    // rows: [newRow], // always add a new row item after update...
+    caret: caret, //FIXME Change this since this will only be used for the OWN caret...
   };
 
   // console.log('state:charsById', charsById);
@@ -446,23 +443,6 @@ function findPosById(id) {
 // we'll  def need this after we merge remote state and perform deletions or insertions.
 // IN general we'll want the caret to be sticky and STICK to a charID (non-tombstoned char).
 function updateCaretPosition(id) {}
-
-export function getActiveRowEl() {
-  // get caret
-  var sel = window.getSelection();
-  var rowEl;
-
-  // current textNode at cursor (works unless row is blank. Then it can be at a elNode
-  var aNode = sel.anchorNode;
-  // if you are a textNode
-  if (aNode.nodeType === 3) {
-    rowEl = aNode.parentNode.closest('.row');
-  } else {
-    rowEl = aNode.closest('.row');
-  }
-
-  return rowEl;
-}
 
 // returns an array of chars that need to be deleted (tombstoned)
 function generateDeleteOperationFromSelection(startPos, endPos) {
@@ -509,23 +489,8 @@ function generateOperation(opType, pos, chars) {
   // what row:pos? That way we can look up the thing to use as a reference point...
   var {charPosition, line} = pos;
 
-  // is anything selected? if it is, generate
-
-  // TODO: take tombstoning into account
-  // Filter out the tombstoned objects
-  // TODO: add safe getter...
-  //
-  //
-
-  // ignore tombstoned lines and chars when counting
-  // filter out tombstoned items
-  // debugger;
-  var charId =
-    state.rows[line][charPosition - 1] &&
-    state.rows[line].filter(x => !x.tombstone)[charPosition - 1].id;
-  // console.log('##charId', charId);
-  // state;
-  // INSERT('a2', 'H') // optioal third is going to be  the ID of the newChar to be inserted... if it comes from remote we want to prefill that one..
+  var char = getCharAtPosition(pos);
+  var charId = char && char.id;
 
   if (opType === 'delete') {
     return {
@@ -538,13 +503,14 @@ function generateOperation(opType, pos, chars) {
   // INSERTION
   return {
     type: opType,
-    insertAt: charId, // for deletions it can be an array of chars. For insert it's only one, but let's keep it consistent...
+    // FIXME: change to insertAfter
+    insertAfter: charId, // for deletions it can be an array of chars. For insert it's only one, but let's keep it consistent...
     value: chars,
     // possibly useful that isn't specificy part of teh obj
     // FIXME: remove this later if possible.  hack for now to get it working properly...
-    meta: {
-      row: line - 1,
-    },
+    // meta: {
+    //   row: line - 1,
+    // },
     // id
   };
 }
@@ -576,6 +542,9 @@ function applyOperationToState(opName, pos, chars) {
 
   var op = generateOperation(opName, pos, chars);
 
+  // if delete op and no charID, bail, because it means we're trying to delete an empty char at beginning of editor
+  if (op.type === 'delete' && !op.deleteChars[0]) return;
+
   operations.push(op);
   // console.log('##operations', operations);
 
@@ -604,7 +573,7 @@ export function mergeRemoteOperation(op) {
   // and then apply all updates streaming in...
   //
 
-  if (op.peer === PEER_ID && !initPhase) {
+  if (op.peer === getSelfPeerId()) {
     console.log('## IGNORING REMOTE op from self:', op);
   } else {
     console.log('## REMOTE op to apply:', op);
