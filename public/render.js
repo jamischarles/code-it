@@ -29,8 +29,12 @@ export function getPositionFromCharId(charId) {
 }
 
 // return the char rendered to this pos during the last render cycle (cached)
-export function getCharAtPosition(pos) {
+// if you don't want it to charPos:--1, pass exactPosition == true (needed when getting ranges of chars)
+// FIXME: maybe we should move the --1 to another spot... It is nice having it in 1 place though...
+export function getCharAtPosition(pos, exactPosition) {
   var {line, charPosition} = pos;
+
+  if (exactPosition) return renderCacheByRows[line][charPosition];
 
   // if 0,0 then don't decrement and return early
   if (line === 0 && charPosition === 0) {

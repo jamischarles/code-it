@@ -36,13 +36,14 @@ export function updateRowIfNeeded(rowEl) {
   return false; // not updated
 }
 
-export function getActiveRowEl() {
+// you can override the starting point if you pass in the anchorNode
+export function getActiveRowEl(forceAnchorNode) {
   // get caret
   var sel = window.getSelection();
   var rowEl;
 
   // current textNode at cursor (works unless row is blank. Then it can be at a elNode
-  var aNode = sel.anchorNode;
+  var aNode = forceAnchorNode || sel.anchorNode;
   // if you are a textNode
   if (aNode.nodeType === 3) {
     rowEl = aNode.parentNode.closest('.row');
@@ -162,7 +163,7 @@ export function getCharPosFromSelectionObj(rowEl, focusedNode, offset) {
 
   // if we already at first child in current row, then bail
   if (!curNode.previousSibling && curNode.parentNode === rowEl) {
-    return {charPosition: charCount, line: rowNum};
+    return {line: rowNum, charPosition: charCount};
   }
 
   curNode = curNode.previousSibling || curNode.parentNode.previousSibling;
@@ -178,7 +179,7 @@ export function getCharPosFromSelectionObj(rowEl, focusedNode, offset) {
     // childNumber++;
   }
 
-  return {charPosition: charCount, line: rowNum};
+  return {line: rowNum, charPosition: charCount};
 }
 
 // FIXME: Add some unit  test around this...

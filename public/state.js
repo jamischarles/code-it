@@ -206,32 +206,53 @@ function getSelectionRangeBoundaries() {
 
   if (!isTextSelected) return false;
 
-  var rowEl = getActiveRowEl();
+  var startingRowEl = getActiveRowEl(selObj.anchorNode);
+  var endingRowEl = getActiveRowEl(selObj.focusNode);
   //start/end might be rotated depending on which side you start the selection from
   var startPos = getCharPosFromSelectionObj(
-    rowEl,
+    startingRowEl,
     selObj.anchorNode,
     selObj.anchorOffset,
   );
   var endPos = getCharPosFromSelectionObj(
-    rowEl,
+    endingRowEl,
     selObj.focusNode,
     selObj.focusOffset,
   );
 
-  // ensure start is lower number (because we don't care which side started selection for our use cases)
+  // ensure start is lower number (because we don't care which side (or row) started selection for our use cases)
   //
-  if (startPos.charPosition < endPos.charPosition) {
-    return {
-      start: startPos,
-      end: endPos,
-    };
-  } else {
-    return {
+  // 1) lower row must be start
+  // 2) if same row, lower charPos must be start
+  //
+  //
+
+  // default values allow us to ignore half the use cases...
+  var returnVal = {
+    start: startPos,
+    end: endPos,
+  };
+
+  // if start/end are on same line AND start is later on line, swap start/end
+  if (
+    startPos.line === endPos.line &&
+    startPos.charPosition > endPos.charPosition
+  ) {
+    returnVal = {
       start: endPos,
       end: startPos,
     };
   }
+
+  // if start is on a lower line than start swap start/end
+  if (startPos.line > endPos.line) {
+    returnVal = {
+      start: endPos,
+      end: startPos,
+    };
+  }
+
+  return returnVal;
 }
 
 // reducer type thing
@@ -433,21 +454,52 @@ export function getLiveCharFromDeadOne(deadCharId) {
 function updateCaretPosition(id) {}
 
 // returns an array of chars that need to be deleted (tombstoned)
+// TODO: for selection testing you need to test rtl vs ltr. It makes a difference!
+// FIXME: simpilfy the logic in here
 function generateDeleteOperationFromSelection(startPos, endPos) {
+  debugger;
   var charIDsToDelete = [];
   // look up all the char ids included in range between startPos and endPos
-  //
-  // FIXME: For now, assume that start & end are on same line... We'll need to fix this later...
-  var {line} = startPos;
-
+  //FIXME: remove some of these...?
+  var startLine = startPos.line;
   var startIndex = startPos.charPosition;
+
+  var endLine = endPos.line;
   var endIndex = endPos.charPosition;
 
-  // new array of row minus dead chars
-  var liveCharsOnRow = state.rows[line].filter(x => !x.tombstone);
+  // loop through lines (inclusive) Lines 2-4 should include line 4?
+  for (var j = startLine; j <= endLine; j++) {
+    var curLine = j;
 
-  for (var i = startIndex; i < endIndex; i++) {
-    charIDsToDelete.push(liveCharsOnRow[i].id);
+    // FIXME: simplify this logic. Maybe a while loop?
+    var startCharPos = 0;
+    // if we're on the starting line, startPos should be where the selection starts
+    if (curLine === startLine) startCharPos = startIndex;
+
+    var endCharPos = 1000000000; // super high so we go until no more chars on that row...
+    // if we're on the ending line, endPos should be where the selection ends
+    if (curLine === endLine) endCharPos = endIndex;
+
+    // keep growing until there's no more char (means we reached end of row)
+    for (var i = startCharPos; i < endCharPos; i++) {
+      var char = getCharAtPosition({line: curLine, charPosition: i}, true);
+      if (!char) break;
+      charIDsToDelete.push(char.id);
+    }
+
+    // loop while there are still chars on row. When we run out, it'll go to next line...
+    // while (curChar) {
+    //   charIDsToDelete.push(curChar.id);
+    //   curPos++;
+    //   curChar = getCharAtPosition({line, charPosition: curPos}, true);
+    // }
+
+    // loop through chars on line
+    // for (var i = startIndex; i < endIndex; i++) {
+    //   var char = getCharAtPosition({line, charPosition: i}, true);
+    //   if (!char) continue; // Is this even needed?
+    //   charIDsToDelete.push(char.id);
+    // }
   }
 
   // FIXME: abstract this so we generate these consistently from both places...?
@@ -528,20 +580,17 @@ function applyOperationToState(opName, pos, chars) {
     operations.push(deleteOperation); // delete the selection
   }
 
-  // if no selection,  AND delete op, -1 the pos so we  delete char to the LEFT of the  caret...
-  // if (!start && !end && opName === 'delete') {
-  //   pos.charPosition--;
-  // }
-  //
-  // FIXME: if range && delete op, don't  generate another op...
+  // if ranged delete from selection (no insert), do NOT generate another deletion, else too many chars will be deleted
+  if (opName === 'delete' && operations.length > 0) {
+    // do nuthin
+  } else {
+    var op = generateOperation(opName, pos, chars);
 
-  var op = generateOperation(opName, pos, chars);
+    // if delete op and no charID, bail, because it means we're trying to delete an empty char at beginning of editor
+    if (op.type === 'delete' && !op.deleteChars[0]) return;
 
-  // if delete op and no charID, bail, because it means we're trying to delete an empty char at beginning of editor
-  if (op.type === 'delete' && !op.deleteChars[0]) return;
-
-  operations.push(op);
-  // console.log('##operations', operations);
+    operations.push(op);
+  }
 
   // loop through the operations we need to apply
   operations.forEach(op => updateState(op, false));
