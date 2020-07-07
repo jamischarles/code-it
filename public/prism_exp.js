@@ -155,6 +155,11 @@ export function getCharPosFromSelectionObj(rowEl, focusedNode, offset) {
   // skip the current one because we already got count for it with aOffset...
   // only count chars on the current row we are on...
 
+  // if we're already at div.row (empty row) then bail and return beginning of current row
+  if (curNode === rowEl) {
+    return {line: rowNum, charPosition: charCount};
+  }
+
   // if we already at first child in current row, then bail
   if (!curNode.previousSibling && curNode.parentNode === rowEl) {
     return {charPosition: charCount, line: rowNum};

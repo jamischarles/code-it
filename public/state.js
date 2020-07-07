@@ -27,6 +27,7 @@ var initPhase = true;
 setTimeout(() => (initPhase = false), 2000);
 
 import {getCharPosFromSelectionObj, getActiveRowEl} from './prism_exp';
+import {getCharAtPosition} from './render';
 import {getSelfPeerId} from './firebase';
 
 // state starts as empty...
@@ -126,30 +127,6 @@ export function getCharById(charId) {
   return charsById[charId];
 }
 
-// pass in whatever thing we need wether it's ID or position...
-export function getCharAtPosition(pos) {
-  var line = pos.line;
-  var charP = pos.charPosition;
-
-  // FIXME: we should have a vDom cache where we store the rows?... Just so we can get the char by id...
-  // FIXME: how will  we get row from this? Doesn't make sense to manually split it every time...
-  //
-  var afterChar = state.liveContent[charP - 1];
-  return afterChar;
-
-  // ignore tombstoned chars
-  var liveCharsOnRow = state.rows[line].filter(x => !x.tombstone);
-  // FIXME: make this a fn so we can just return the live rows...
-  var afterChar = liveCharsOnRow[charP - 1];
-
-  // we want to show the char we want to render AFTER.
-  // That means we need to account for thtat in the rendering logic...
-  // This is generally how we handle caret rendering logic.
-  // if there's no char assume beginning of line
-
-  return afterChar;
-}
-
 // returns the first live el
 // if nothing returned, assume there are no live chars
 export function getFirstLiveChar(lineNum) {
@@ -187,6 +164,7 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
   // is this a mutation?
 
   var BACKSPACE = 8;
+  var ENTER = 13;
   var key = e.keyCode;
   // console.log('e', e);
   //
@@ -194,7 +172,11 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
   if (key === BACKSPACE) {
     // console.log('DELETE:', `${pos.line}:${pos.charPosition}`);
     // TODO: Make sugar for delete(0), insert(1, 'h','e');
+    // debugger;
     applyOperationToState('delete', pos);
+    // swap ENTER for \n
+  } else if (key === ENTER) {
+    applyOperationToState('insert', pos, '\n');
   } else {
     applyOperationToState('insert', pos, e.key);
     // console.log('INSERT:', `${pos.line}:${pos.charPosition}:${e.key} `);
@@ -323,16 +305,8 @@ function updateState(op, isRemoteOp) {
 
     // find the first char marked for deletion so we'll know where to place the caret
     // FIXME: Handle logic here for "findCaretPos  after deletion"
-    var index = state.liveContent.findIndex(el => el.id === op.deleteChars[0]);
-
-    var j = index;
-    while (j > -1) {
-      var focusedItem = state.liveContent[j];
-      if (!focusedItem.tombstone) break;
-      j--;
-      // console.log('while');
-    }
-    if (focusedItem.tombstone) focusedItem = undefined;
+    // can't  use liveContent here because me may need to grab a tombstoned char
+    var focusedItem = getLiveCharFromDeadOne(op.deleteChars[0]);
 
     // TODO: rip the deleted item out and replace the liveContent array...
   }
@@ -431,10 +405,24 @@ function updateState(op, isRemoteOp) {
 //
 // }
 
-// gives the exact row/id where we can find the element
-function findPosById(id) {
-  state; // FIXME: make this pure?
-  return {row: 0, index: 0};
+// returns a live char if you pass a dead one (basically closest living sibling to the left)
+// useful to determine where the caret should be after a deletion etc...
+export function getLiveCharFromDeadOne(deadCharId) {
+  var index = state.content.findIndex(el => el.id === deadCharId);
+
+  var j = index;
+  // travel backwards until we find the first non-tombstoned char
+  while (j > -1) {
+    var focusedItem = state.content[j];
+    if (!focusedItem.tombstone) break;
+    j--;
+    // console.log('while');
+  }
+
+  // if we go to beginning and they are all tombstoned, then return undef
+  if (focusedItem.tombstone) focusedItem = undefined;
+
+  return focusedItem;
 }
 
 // move the caret for the current peer
@@ -539,6 +527,13 @@ function applyOperationToState(opName, pos, chars) {
     var deleteOperation = generateDeleteOperationFromSelection(start, end);
     operations.push(deleteOperation); // delete the selection
   }
+
+  // if no selection,  AND delete op, -1 the pos so we  delete char to the LEFT of the  caret...
+  // if (!start && !end && opName === 'delete') {
+  //   pos.charPosition--;
+  // }
+  //
+  // FIXME: if range && delete op, don't  generate another op...
 
   var op = generateOperation(opName, pos, chars);
 

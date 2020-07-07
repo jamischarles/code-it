@@ -4,13 +4,12 @@ import {
   mergeRemoteOperation,
   getOpQueue,
   flushOpQueue,
-  getCharAtPosition,
   updatePeerState,
   getFirstLiveChar,
   getState,
 } from './state';
 import {getActiveRowEl, saveCaretPos} from './prism_exp';
-import {renderPeerCarets} from './render';
+import {renderPeerCarets, getCharAtPosition} from './render';
 // FIXME: consider renaming it to something more generic...
 
 // TODO: consider using proxy values to listen to these for updates so we can then call init functions that rely on these...

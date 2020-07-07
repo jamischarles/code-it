@@ -9,7 +9,7 @@ import {
   getActiveRowEl,
 } from './prism_exp';
 import {getSelfPeerId} from './firebase';
-import {getCharById, getState} from './state';
+import {getCharById, getLiveCharFromDeadOne, getState} from './state';
 //
 //
 //
@@ -17,7 +17,7 @@ import {getCharById, getState} from './state';
 // this will allow us to do the following:
 // - keep track of position by charID in the dom (where each char has been inserted)
 // - vDom stuff. Old vs new row content so we can see where and how to inserts content
-var renderCache = [];
+var renderCacheByRows = [[]]; // start with single row
 
 var posCacheById = {};
 
@@ -26,6 +26,27 @@ export function getPositionFromCharId(charId) {
   //
   // For now let's use the liveContent in state
   return posCacheById[charId] && posCacheById[charId].pos;
+}
+
+// return the char rendered to this pos during the last render cycle (cached)
+export function getCharAtPosition(pos) {
+  var {line, charPosition} = pos;
+
+  // if 0,0 then don't decrement and return early
+  if (line === 0 && charPosition === 0) {
+    return renderCacheByRows[line][charPosition];
+  }
+
+  // FIXME: charPosition-1 should be applied universally... Should we fix this here or in saveCaret()? / getPos() logic?
+  charPosition--;
+
+  // if charPosition = -1, it means we need the last item on the prior row...
+  if (charPosition === -1) {
+    line--;
+    charPosition = renderCacheByRows[line].length - 1;
+  }
+
+  return renderCacheByRows[line][charPosition];
 }
 
 // str data structure?
@@ -49,6 +70,7 @@ export function writeHtmlStrFromState(state, row) {
   console.log('##state', state);
 
   posCacheById = {}; // reset position cache
+  renderCacheByRows = [[]]; // reset renderCache
   var rows = [];
 
   // get ALL the content
@@ -63,6 +85,8 @@ export function writeHtmlStrFromState(state, row) {
     var char = content[i];
     var val = char.value;
 
+    renderCacheByRows[lineCounter].push(char); // save the current item to the renderCache for easy position lookups after
+
     // save off current char to posCache so we can easily retrieve position later
     posCacheById[char.id] = content[i];
     posCacheById[char.id].pos = {line: lineCounter, charPosition: posCounter};
@@ -72,12 +96,15 @@ export function writeHtmlStrFromState(state, row) {
       if (currentRowStr === '') {
         // if row is empty, then add <br> tag so the line can hold a caret in the UI
         currentRowStr = '<br>';
+        rows.push(currentRowStr); // don't tokenize <br> empty line
+      } else {
+        rows.push(tokenize(currentRowStr));
       }
 
-      rows.push(tokenize(currentRowStr));
       currentRowStr = '';
       lineCounter++;
       posCounter = 0; // reset pos counter
+      renderCacheByRows.push([]); // add another row entry to renderCache. FIXME: can we simplify some of these data structures?
       continue;
     }
 
@@ -162,22 +189,31 @@ export function renderOwnCaret() {
   // console.log('caretObj', caretObj);
 
   // we either need position, or a charID...
-  if (caretObj.afterChar) {
-    pos = getPositionFromCharId(caretObj.afterChar.id);
-  } else {
-    // if there's no afterChar, assume we are at very beginning of editor
-    pos = {line: 0, charPosition: 0};
-  }
+  // if (caretObj.afterChar) {
+  //   pos = getPositionFromCharId(caretObj.afterChar.id);
+  // } else {
+  //   // if there's no afterChar, assume we are at very beginning of editor
+  //   pos = {line: 0, charPosition: 0};
+  // }
 
   // if we have no char as reference point, use caretObj.line as fallback and go to line=caretObj.line and charPos=0
   if (!caretObj.afterChar) {
-    var row = getRowByIndex(pos.line);
-    return restoreCaretPos(row, 0);
+    var rowEl = getRowByIndex(0);
+    return restoreCaretPos(rowEl, 0);
   }
 
+  // FIXME: does this invalidate the logic we're using earlier...?
   var pos = caretObj.afterChar.pos;
-  var row = getRowByIndex(pos.line);
-  restoreCaretPos(row, pos.charPosition + 1);
+  var rowEl = getRowByIndex(pos.line);
+  var charPos = pos.charPosition + 1;
+
+  // if we need to render caret after a \n newline char, jump pos to next line.
+  if (caretObj.afterChar && caretObj.afterChar.value === '\n') {
+    rowEl = getRowByIndex(pos.line + 1);
+    charPos = 0;
+  }
+
+  restoreCaretPos(rowEl, charPos);
 }
 
 // we'll need to debounce this...
@@ -207,6 +243,11 @@ export function renderPeerCarets(peerState) {
 
     // don't render peer caret for myself. Only carets for other peers
     if (getSelfPeerId() === peer.peerId) return;
+
+    // if dead char (no pos) then get the prior living sibling
+    if (char.tombstone) {
+      char = getLiveCharFromDeadOne(char.id);
+    }
 
     var caretEl = createPeerCaretHTML(peer.peerId, char.pos, i);
 
