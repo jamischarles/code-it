@@ -7,6 +7,7 @@ import {
   updatePeerState,
   getFirstLiveChar,
   getState,
+  getSelectionRangeBoundaries,
 } from './state';
 import {getActiveRowEl, saveCaretPos} from './prism_exp';
 import {renderPeerCarets, getCharAtPosition} from './render';
@@ -420,6 +421,8 @@ function afterDbIsReady() {
   // does that work with empty spaces? For now just keep the current state...
   // TODO: see how this works when we're on an empty space...
   // If it's empty we can use offset?
+  //
+  // FIXME: debounce this?
   document.addEventListener('selectionchange', e => {
     // console.log('selection changed!', document.getSelection());
     // TODO: debounce the execution of this...
@@ -429,6 +432,13 @@ function afterDbIsReady() {
     // console.log('#99) pos', pos);
     var t = getCharAtPosition(pos);
     var id = t && t.id;
+
+    // if selection, get selection start/stop chars so we can send that to other peers...
+    var {start, end} = getSelectionRangeBoundaries();
+    if (start && end) {
+      var selStartChar = getCharAtPosition(start);
+      var selEndChar = getCharAtPosition(end);
+    }
 
     // if there's no char, assume beginning of line... Grab the first live char, and store that...
     if (!t) {
@@ -465,6 +475,15 @@ function afterDbIsReady() {
     //
     var updates = {};
     updates[`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/caret`] = id;
+
+    // if there's a selection, send the selection start/stop chars to peers
+    if (start && end) {
+      updates[`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/selStart`] =
+        selStartChar.id;
+      updates[`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/selEnd`] =
+        selEndChar.id;
+    }
+
     db.ref().update(updates);
 
     // FIXME: remove...

@@ -189,7 +189,7 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
 }
 
 // FIXME: move  to utils
-function getSelectionRangeBoundaries() {
+export function getSelectionRangeBoundaries() {
   var selObj = window.getSelection();
   // var selRange = selObj.getRangeAt(0);
   // console.log('selObj', selObj);
@@ -388,6 +388,9 @@ function updateState(op, isRemoteOp) {
     // line: currentRowIndex, // FIXME: Try to remove? Need this as a fallback when we don't have a char (empty line)
   };
 
+  // if remote op, don't change self caret position
+  if (isRemoteOp) caret = state.caret;
+
   console.log('caret', caret);
 
   // FIXME: move this up higher in this function and make it more efficient?, but this works for now...
@@ -398,7 +401,7 @@ function updateState(op, isRemoteOp) {
     content,
     liveContent,
     // rows: [newRow], // always add a new row item after update...
-    caret: caret, //FIXME Change this since this will only be used for the OWN caret...
+    caret: caret,
   };
 
   // console.log('state:charsById', charsById);

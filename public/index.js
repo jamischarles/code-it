@@ -394,9 +394,28 @@ function init(rowsContainerEl) {
     // Q: How do we calculate the new insertion point? Should state save and tell use what the new pos should be? Yes. State should store the pos.
     // We don't need operations to move caret, but can be a simple replace. pos=5:3. Should it be based on charID as well? I think so...
     // That way we can group it with a char that was just inserted, and it will move along with the chars. YES. That's how we should store caret pos in state...
+
+    // innerHTML is sync, not async, so we don't need a render callback for now...
+    // https://stackoverflow.com/questions/42986295/is-innerhtml-asynchronous#:~:text=The%20innerHTML%20property%20actual%20does,to%20accept%20a%20new%20event.
+    // after render call renderOwnCaret()
     renderToDom(rowsContainerEl, writeHtmlStrFromState(getState()));
-    // debugger;
+
     renderOwnCaret();
+
+    // 3 ways to do a render callback... (how does react do it?)
+    // 1) mutation observer
+    // 2) Poll for existence in dom
+    //document.body.contains(YOUR_ELEMENT_HERE);
+    // el.parentNode == null?
+    // div.baseURI
+    //element.closest('body') === null
+    // 3) setTimeout... (hacky, but easy, let's try this...)
+    // 4) window.requestAnimationFrame(() => {
+    // console.debug(document.querySelector("video").clientWidth);
+    // });
+
+    // need to wait until render completes to call this, or we get race condition where we try to render caret
+    // renderOwnCaret();
 
     // console.log('restore:pos after render', pos);
     // restoreCaretPos(rowEl, pos);

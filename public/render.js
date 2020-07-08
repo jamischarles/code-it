@@ -112,6 +112,13 @@ export function writeHtmlStrFromState(state, row) {
       continue;
     }
 
+    // these last two are never run because of continue statement
+    // so the \n is never added to dom... what if it was in dom?
+    // do we like <br> or \n better in dom?
+    // at end we have divergence between renderCache[[hello],[]] and rows...[[hello]]
+    // maybe we should
+    // also renderCache includes the \n char whereas rows doesn't
+    // What if it did?
     currentRowStr += val;
     posCounter++;
   }
@@ -137,8 +144,15 @@ export function writeHtmlStrFromState(state, row) {
   //   );
   // }
 
-  // if there's text left in the buffer (like on last row) make sure we add that
+  // if the very last char rendered was a newline, we need to make sure to add a <br> on the next row for it in the dom...
+  // weird hackiness. This is one point of deviation I don't like from renderCache to rows (actual html):
+  // \n will be stored in cache as {val="\n"} at the end of the row, but in the html it'll show up as <br> at the beginning ONLY if it's an empty line.
+  if (val === '\n') {
+    rows.push('<br>');
+  }
+
   if (currentRowStr.length > 0) {
+    // if there's text left in the buffer (like on last row) make sure we add that
     rows.push(tokenize(currentRowStr));
   }
 
@@ -147,6 +161,7 @@ export function writeHtmlStrFromState(state, row) {
     rows.push('<br>');
   }
 
+  console.log('##rows to RENDER', rows);
   return rows;
 }
 
@@ -158,7 +173,7 @@ function tokenize(str) {
 
 // FIXME: add some vDom diffing either here, or in renderToDom
 // Do that after we have multi rows working...
-export function renderToDom(node, htmlRows) {
+export function renderToDom(node, htmlRows, cb) {
   console.log('##renderToDom: node', node);
   console.log('##renderToDom: html', htmlRows);
   var html = '';
@@ -166,6 +181,10 @@ export function renderToDom(node, htmlRows) {
     html += `<div class="row">${rowContent}</div>`;
   });
   node.innerHTML = html;
+
+  // hacky way to get a "rendered" callback...
+  // Could make this a promise... That polls and resolves when it it's in the dom...
+  setTimeout(cb, 0);
 }
 
 //FIXME: replace this with a dom ref in state or similar...
@@ -214,6 +233,9 @@ export function renderOwnCaret() {
   // if we need to render caret after a \n newline char, jump pos to next line.
   if (caretObj.afterChar && caretObj.afterChar.value === '\n') {
     rowEl = getRowByIndex(pos.line + 1);
+    console.log('##rowEl', rowEl);
+    var r = document.querySelector('.rows');
+    console.log('##.rows', r);
     charPos = 0;
   }
 
