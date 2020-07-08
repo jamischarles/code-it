@@ -110,15 +110,23 @@ editor.addEventListener('keydown', function(e) {
   // for arrow keys, don't generate operations for now (eventually we'll want to update caret state). Maybe use the listener...
   // FIXME: replace this with array
   // FIXME: or replace with switch...
-  if (key === 37 || key === 38 || key === 39 || key === 40) return;
+  // if
 
-  if (key === SHIFT || key === ALT || key === META || key === CTRL) return;
+  // simple hacky way to igore all keys that won't result in single char entry
+  // ie: CAPSLOCK, SHIFT, ENTER, etc...
+  // we do NOT want to generate operations from any of these...
+
+  // if (key === 37 || key === 38 || key === 39 || key === 40) return;
+
+  // FIXME: redundante because of e.key.length check up above...
+  // if (key === SHIFT || key === ALT || key === META || key === CTRL) return;
 
   // IS cmd different keycode on FF vs chrome?!?
-  if (e.metaKey) return; // does this even help?
+  // Redundant
+  // if (e.metaKey) return; // does this even help?
 
   // for all other mutative actions, catch them, and update in state before updating the UI
-  e.preventDefault();
+  // e.preventDefault();
   generateSimpleOperationFromKeystroke(e, pos);
   // renderOwnCaret(getState().carets[0]); // FIXME: DO we need this?
   // var state = getState();

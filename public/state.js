@@ -169,6 +169,17 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
   // console.log('e', e);
   //
 
+  // OPT IN
+  // ONLY commands / chars we want to allow through are:
+  // "BACKSPACE", "ENTER", and single chars
+  // anything else get's killed right here
+  // FIXME: could just replace the else statement below with a if key.length check and don't have an else...
+  if (key != BACKSPACE && key != ENTER && e.key.length > 1) return;
+
+  // cancel the default event behavior for the keys we're handling manually
+  // FIXME: is this even needed?
+  e.preventDefault();
+
   if (key === BACKSPACE) {
     // console.log('DELETE:', `${pos.line}:${pos.charPosition}`);
     // TODO: Make sugar for delete(0), insert(1, 'h','e');
