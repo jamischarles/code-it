@@ -284,6 +284,7 @@ function updateState(op, isRemoteOp) {
 
   // loop through the row...
   // TODO: consider having separate fn for each row we process...
+  var caret;
   var insertionID;
   var content = [];
   var liveContent = [];
@@ -391,32 +392,41 @@ function updateState(op, isRemoteOp) {
   //   });
   // }
 
-  // update the new caret position
-  var caret = {
-    client: getSelfPeerId(),
-    after: insertionID || op.after, // FIXME: this will cause bugs when sent to other peers. esp for delete...
-    afterChar: newChar || focusedItem, // FIXME: need better new name for nowHaveCaret here
-    // line: currentRowIndex, // FIXME: Try to remove? Need this as a fallback when we don't have a char (empty line)
-  };
+  // // update the new caret position
+  // var caret = {
+  //   // client: getSelfPeerId(),
+  //   // after: insertionID || op.after, // FIXME: this will cause bugs when sent to other peers. esp for delete...
+  //   afterChar: newChar || focusedItem, // FIXME: need better new name for nowHaveCaret here
+  //   // line: currentRowIndex, // FIXME: Try to remove? Need this as a fallback when we don't have a char (empty line)
+  // };
 
   // if remote op, don't change self caret position
-  if (isRemoteOp) caret = state.caret;
+  // FIXME: consider handling delete here if they delete where the caret is...
+  // must be after state because it
+  if (!isRemoteOp) {
+    caret = updateOwnCaretPos(newChar || focusedItem);
+  }
 
-  console.log('caret', caret);
-
-  // FIXME: move this up higher in this function and make it more efficient?, but this works for now...
-  // var liveContent = content.filter(x => !x.tombstone);
+  // if peer deleted the char our caret is attached to, update caretPos so it can fetch the adjacent live char to attach caret to
+  // FIXME: maybe just always update caret... and combine this with logic above...
+  // debugger;
+  // console.log('##4 isRemoteOp', isRemoteOp);
+  // console.log('##4 state.caret', state.caret);
+  if (
+    isRemoteOp &&
+    (state.caret && state.caret.afterChar && state.caret.afterChar.tombstone)
+  ) {
+    // console.log('##4inside');
+    // FIXME: flatten state.caret already
+    caret = updateOwnCaretPos(state.caret.afterChar);
+  }
 
   state = {
     ...state,
     content,
     liveContent,
-    // rows: [newRow], // always add a new row item after update...
-    caret: caret,
+    caret: caret || state.caret, // new caret pos or old caret pos
   };
-
-  // console.log('state:charsById', charsById);
-  // console.log('state', state.rows[0]);
 
   // save the operation we just applied into the opqueue so we can send it to others...
   // IF not remote operation, then push it to opQueue
@@ -439,6 +449,34 @@ function updateState(op, isRemoteOp) {
 // function findFirstPreviousLiveSibling() {
 //
 // }
+
+//FIXME: use startSel, endSel to restore selection...
+//id can be string ID or char Obj
+export function updateOwnCaretPos(idOrObj, startSel, endSel) {
+  var charObj = idOrObj;
+
+  if (typeof charObj === 'string') {
+    charObj = getCharById(charObj);
+  }
+
+  // if dead char, get the prior sibling
+  // this will be neeeded if a peer deletes the char our caret is on
+  if (charObj.tombstone) {
+    charObj = getLiveCharFromDeadOne(charObj.id);
+  }
+
+  state.caret = {
+    // stored as the charObj...
+    // does this need to be getLiveCharFromDeadOne? or at least a check here if the char is dead...?
+    // FIXME: seriously consider just collapsing this into state.caret... Would make handling caret logic simpler
+    afterChar: charObj,
+  };
+
+  // fire caret saved event here...
+  console.log('## own caret pos updated', state.caret);
+  // returns new caret obj
+  return state.caret;
+}
 
 // returns a live char if you pass a dead one (basically closest living sibling to the left)
 // useful to determine where the caret should be after a deletion etc...

@@ -5,6 +5,7 @@ import {
   getOpQueue,
   flushOpQueue,
   updatePeerState,
+  updateOwnCaretPos,
   getFirstLiveChar,
   getState,
   getSelectionRangeBoundaries,
@@ -465,6 +466,9 @@ function afterDbIsReady() {
 
     if (!id) return;
 
+    // save off self caret pos in state, so state.caret is never stale...
+    updateOwnCaretPos(id, start, end); // do we need start/end selection?
+
     // FIXME: should we store this on peers/caret instead? Will tihs mess with the online status? Shouldn't...
     // console.log('SESSION_KEY', SESSION_KEY);
     // console.log('PEER_ID', PEER_ID);
@@ -477,11 +481,17 @@ function afterDbIsReady() {
     updates[`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/caret`] = id;
 
     // if there's a selection, send the selection start/stop chars to peers
+    // if not, remove those values
     if (start && end) {
       updates[`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/selStart`] =
         selStartChar.id;
       updates[`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/selEnd`] =
         selEndChar.id;
+    } else {
+      updates[
+        `/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/selStart`
+      ] = null;
+      updates[`/sessions/${SESSION_KEY}/online-peers/${PEER_ID}/selEnd`] = null;
     }
 
     db.ref().update(updates);
