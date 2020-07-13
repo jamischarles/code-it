@@ -180,7 +180,33 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
   // cancel the default event behavior for the keys we're handling manually
   // FIXME: is this even needed?
 
-  if (key === BACKSPACE) {
+  // if cmd is being held down or pressed, don't insert it
+  // handle cut
+  // handle paste
+  // this is fired from cut & paste event handlers...
+  if (e.type === 'paste') {
+    // turn this into many ops, or a single one and have state manage it...
+    // latter
+
+    // FIXME: can / should we simplify this? Do we even need the latter?
+    // // FIXME: do we even need to listen for paste event? Or should we send this at a highler level... For now... leave this in. Nice to have a hook if we need it...
+    let pasteText = e.clipboardData.getData('text');
+    // let pasteText = (e.clipboardData || window.clipboardData).getData('text');
+
+    applyOperationToState('insert', pos, pasteText);
+    console.log(`##PASTE: ${pos}, ${pasteText}`);
+    e.preventDefault();
+
+    // do nothing
+
+    // handle paste
+    //
+
+    // block all other meta keys
+  } else if (e.metaKey) {
+    // can't prevent this on keyDown, bc it'll block paste, copy, cut ops etc...
+    // e.preventDefault();
+  } else if (key === BACKSPACE) {
     // console.log('DELETE:', `${pos.line}:${pos.charPosition}`);
     // TODO: Make sugar for delete(0), insert(1, 'h','e');
     // debugger;
@@ -282,19 +308,25 @@ export function getSelectionRangeBoundaries() {
 // if it's a remote op, don't add it to the opQueue... (causes infinite loop)
 function updateState(op, isRemoteOp) {
   debugger;
-  // console.log('####updateState:', op);
+  // official ones we should log.
+  // Always log the OP, opt in/out to before/after...
+  // BEFORE state
+  // OP
+  // AFTER state
+  console.log('####updateState:', op);
 
   // FIXME get this from charID if possible later...
   // TODO: we need to give rows IDs too...
   // TODO: have reparate counter for rows, but start it with r. eg: ra1
   // var row = op.meta.row;
 
-  var {type, value} = op;
+  var {type} = op;
+  var charsToInsert = [];
 
   // loop through the row...
   // TODO: consider having separate fn for each row we process...
   var caret;
-  var insertionID;
+  // var insertionID;
   var content = [];
   var liveContent = [];
 
@@ -312,22 +344,45 @@ function updateState(op, isRemoteOp) {
   if (type === 'insert') {
     // fill in prior array items until char we need
     // newRow = currentRow.slice(0, index + 1); // +1 because end not included by default 0,0 would NOT include 0
+    var insertAfter = op.insertAfter;
+
+    charsToInsert = op.insertChars
+      .map(char => {
+        // if id already exists, use that, else generate a new one tagged by this peer
+        char.id = genCharId(char.id); // FIXME: we can simplify this and pull the checking logic out of that function... and check here and simply gen there
+
+        char.insertAfter = char.insertAfter || insertAfter; // if remoteOp this'll be set.
+
+        // failsafe... if char already exists, don't create it...
+        // FIXME: Do we need this?
+        if (charsById[char.id]) {
+          return false;
+        }
+
+        charsById[char.id] = char;
+
+        // for the next pass we'll want to use the prior char, since these are all being inserted sequentially
+        insertAfter = char.id;
+
+        return char;
+      })
+      .filter(char => char); // anything truthy gets kept
 
     // if ID already exists (because other peer created it, use that...)
-    insertionID = genCharId(op.charId);
+    // insertionID = genCharId(op.charId);
 
-    var newChar = {
-      value,
-      id: insertionID,
-    };
+    // var newChar = {
+    //   value,
+    //   id: insertionID,
+    // };
 
     // insert new char
     // newRow.push(newChar);
 
-    if (charsById[insertionID]) {
-      return;
-    }
-    charsById[insertionID] = newChar;
+    // if (charsById[insertionID]) {
+    //   return;
+    // }
+    // charsById[insertionID] = newChar;
 
     // apply any other array items that exist after
     // FIXME: Is there a better es6 operator for INSERT at i in array?
@@ -341,6 +396,8 @@ function updateState(op, isRemoteOp) {
     // for delete, at: [] bc it could be a range of deletions
     op.deleteChars.forEach(id => {
       var char = charsById[id];
+      if (!char)
+        return console.log(`WARNING: cannot tombstone ${id}. Char is missing.`); // if char is somehow missing just ignore it...
       char.tombstone = true;
       delete char.pos; // no position since char is now dead
     });
@@ -355,8 +412,8 @@ function updateState(op, isRemoteOp) {
 
   // if there's no char after, it means it's the first char in the editor
   if (op.type === 'insert' && !op.insertAfter) {
-    content.push(newChar);
-    liveContent.push(newChar);
+    content.push(...charsToInsert); // spread onto array so we don't get nested arrays
+    liveContent.push(...charsToInsert);
   }
 
   // single loop should be better for perf than alternatives
@@ -371,8 +428,8 @@ function updateState(op, isRemoteOp) {
     // find el AFTER which to insert new char
     if (curChar.id === op.insertAfter && op.type === 'insert') {
       // insert the new char
-      content.push(newChar);
-      liveContent.push(newChar);
+      content.push(...charsToInsert);
+      liveContent.push(...charsToInsert);
     }
   }
 
@@ -413,7 +470,8 @@ function updateState(op, isRemoteOp) {
   // FIXME: consider handling delete here if they delete where the caret is...
   // must be after state because it
   if (!isRemoteOp) {
-    caret = updateOwnCaretPos(newChar || focusedItem);
+    var lastCharInserted = charsToInsert[charsToInsert.length - 1];
+    caret = updateOwnCaretPos(lastCharInserted || focusedItem);
   }
 
   // if peer deleted the char our caret is attached to, update caretPos so it can fetch the adjacent live char to attach caret to
@@ -443,7 +501,7 @@ function updateState(op, isRemoteOp) {
   if (!isRemoteOp) {
     // attach the ID of the el just inserted to the OP so we can send it to other peers
     // charId is the ID of the char which is assigned at insertion / creation so we have a unique ID for each char ever created
-    op.charId = op.charId || insertionID; // naive assumption: only time op.charId will be missing is when we
+    // op.charId = op.charId || lastCharInserted.id; // naive assumption: only time op.charId will be missing is when we
     opQueue.push(op);
     // console.log('OP Inserted to Queue:', op);
   }
@@ -462,6 +520,7 @@ function updateState(op, isRemoteOp) {
 //FIXME: use startSel, endSel to restore selection...
 //id can be string ID or char Obj
 export function updateOwnCaretPos(idOrObj, startSel, endSel) {
+  // ONLY time idOrObj should be undefined is if after deletion, we are at very beginning of editor (0:0)
   var charObj = idOrObj;
 
   if (typeof charObj === 'string') {
@@ -470,7 +529,7 @@ export function updateOwnCaretPos(idOrObj, startSel, endSel) {
 
   // if dead char, get the prior sibling
   // this will be neeeded if a peer deletes the char our caret is on
-  if (charObj.tombstone) {
+  if (charObj && charObj.tombstone) {
     charObj = getLiveCharFromDeadOne(charObj.id);
   }
 
@@ -502,7 +561,7 @@ export function getLiveCharFromDeadOne(deadCharId) {
   }
 
   // if we go to beginning and they are all tombstoned, then return undef
-  if (focusedItem.tombstone) focusedItem = undefined;
+  if (focusedItem && focusedItem.tombstone) focusedItem = undefined;
 
   return focusedItem;
 }
@@ -579,6 +638,7 @@ function generateDeleteOperationFromSelection(startPos, endPos) {
 //
 // pos could be obj or array (if there's a start/end range). Only happens for deletion markers. Bc insertion always happens at single spot...
 function generateOperation(opType, pos, chars) {
+  var charsToInsert;
   // operation that can be sent as a string, or can just be applied locally
   // should contain refrences to existing char nodes...
   //
@@ -600,13 +660,23 @@ function generateOperation(opType, pos, chars) {
     };
   }
 
-  //
+  // we already bailed on delete
+  // INSERT use case #################3
+
+  // turn char string into char array, then replace with obj for each char
+  var charsToInsert = chars.split('').map(char => {
+    return {
+      value: char,
+    };
+  });
+  chars;
+
   // INSERTION
   return {
     type: opType,
     // FIXME: change to insertAfter
-    insertAfter: charId, // for deletions it can be an array of chars. For insert it's only one, but let's keep it consistent...
-    value: chars,
+    insertAfter: charId,
+    insertChars: charsToInsert,
     // possibly useful that isn't specificy part of teh obj
     // FIXME: remove this later if possible.  hack for now to get it working properly...
     // meta: {
@@ -630,8 +700,6 @@ function applyOperationToState(opName, pos, chars) {
 
   // will return false if no selection
   var {start, end} = getSelectionRangeBoundaries();
-  // console.log('startPos', start);
-  // console.log('endPos', end);
 
   // if there's selected text, generate a delete action for all the chars in the selection
   // that will be exectued on INSERT (replace) and DELETE

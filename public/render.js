@@ -353,10 +353,10 @@ function createPeerCaretHTML(peerName, caretPos, count) {
   // 4. use .top and .left of that to abs position a 1px by 18px stylized caret on top of the real caret
   // 5. MAGIC
   // This same technique will work to render peer carets and peer selections...
-  var rect = window
-    .getSelection()
-    .getRangeAt(0)
-    .getBoundingClientRect();
+  // var rect = window
+  //   .getSelection()
+  //   .getRangeAt(0)
+  //   .getBoundingClientRect();
 
   // console.log('############peerRect', peerRect);
 

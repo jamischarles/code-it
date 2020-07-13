@@ -207,10 +207,43 @@ editor.addEventListener('keyup', function(e) {
   // sendUpdate(payload);
 });
 
-function prepPayloadToSend(line, rowEl) {
-  var content = rowEl.textContent;
-  return {type: 'update', line, content};
-}
+// handle cut event...
+
+// handle paste event...
+//
+
+document.addEventListener('paste', event => {
+  debugger;
+  var rowEl = getActiveRowEl();
+  if (rowEl) {
+    var pos = saveCaretPos(rowEl);
+  } else {
+    console.log('warning index.js: expected rowEl but couldn\t get it...');
+    pos = {line: 0, charPosition: 0}; // hacky override?
+  }
+
+  generateSimpleOperationFromKeystroke(event, pos);
+});
+
+// editor.addEventListener('paste', event => {
+//   let paste = (event.clipboardData || window.clipboardData).getData('text');
+//   paste = paste.toUpperCase();
+//
+//   console.log('event', event);
+//   console.log('paste', paste);
+//
+//   // const selection = window.getSelection();
+//   // if (!selection.rangeCount) return false;
+//   // selection.deleteFromDocument();
+//   // selection.getRangeAt(0).insertNode(document.createTextNode(paste));
+//   //
+//   // event.preventDefault();
+// });
+
+// function prepPayloadToSend(line, rowEl) {
+//   var content = rowEl.textContent;
+//   return {type: 'update', line, content};
+// }
 
 // multiplayer functionality. Single player will go in prism_exp.js
 
@@ -263,38 +296,38 @@ function prepPayloadToSend(line, rowEl) {
 
 // listen for special keys...
 //https://stackoverflow.com/questions/4604930/changing-the-keypress
-function handleTab(e) {
-  var range;
-  e.preventDefault(); // prevent focus shift.
-
-  // insert 2 spaces before cursor
-  // TODO: extract this into another fn...
-  var sel = window.getSelection();
-  range = sel.getRangeAt(0);
-  range.deleteContents();
-
-  var textNode = document.createTextNode('  ');
-  // FIXME: Bug with this approach: is you can't opt out of it...
-  // it forces indentatino that you cannot escape from...
-  // var tabNode = document.createElement('span');
-  // tabNode.style = 'margin-left: 2em; display: inline-block;'; // space + extra padding for an extra space. Inline-block ensures that new lines will be at same indentation.
-  // tabNode.innerHTML = '  ';
-  // tabNode.innerHTML = '&ensp;';
-
-  // range.insertNode(tabNode);
-  range.insertNode(textNode);
-
-  // debugger;
-  // Move caret to the end of the newly inserted text node
-  // range.setStart(tabNode.childNodes[0], tabNode.textContent.length);
-  // range.setEnd(tabNode.childNodes[0], tabNode.textContent.length);
-
-  // use this if we use a textNode directly
-  range.setStart(textNode, textNode.length);
-  range.setEnd(textNode, textNode.length);
-  sel.removeAllRanges();
-  sel.addRange(range);
-}
+// function handleTab(e) {
+//   var range;
+//   e.preventDefault(); // prevent focus shift.
+//
+//   // insert 2 spaces before cursor
+//   // TODO: extract this into another fn...
+//   var sel = window.getSelection();
+//   range = sel.getRangeAt(0);
+//   range.deleteContents();
+//
+//   var textNode = document.createTextNode('  ');
+//   // FIXME: Bug with this approach: is you can't opt out of it...
+//   // it forces indentatino that you cannot escape from...
+//   // var tabNode = document.createElement('span');
+//   // tabNode.style = 'margin-left: 2em; display: inline-block;'; // space + extra padding for an extra space. Inline-block ensures that new lines will be at same indentation.
+//   // tabNode.innerHTML = '  ';
+//   // tabNode.innerHTML = '&ensp;';
+//
+//   // range.insertNode(tabNode);
+//   range.insertNode(textNode);
+//
+//   // debugger;
+//   // Move caret to the end of the newly inserted text node
+//   // range.setStart(tabNode.childNodes[0], tabNode.textContent.length);
+//   // range.setEnd(tabNode.childNodes[0], tabNode.textContent.length);
+//
+//   // use this if we use a textNode directly
+//   range.setStart(textNode, textNode.length);
+//   range.setEnd(textNode, textNode.length);
+//   sel.removeAllRanges();
+//   sel.addRange(range);
+// }
 
 // TODO: if backspace on double space, just wipe out both?
 
@@ -302,64 +335,64 @@ function handleTab(e) {
 // TODO:  support: if at very beginning/end of line...
 // FIXME: this will need to update state instead of what we're seeing here
 // we are operating on a virtual dom now that is rendered to the real dom...
-function handleEnter(e) {
-  e.preventDefault();
+// function handleEnter(e) {
+//   e.preventDefault();
+//
+//   var rowEl = getActiveRowEl();
+//
+//   // create new row
+//   var div = document.createElement('div');
+//   div.className = 'row';
+//
+//   // cut out parts of old row that need to go in new row
+//   var fragmentForNewLine = cutRowContentAfterCaret();
+//   div.innerHTML = fragmentForNewLine.textContent;
+//
+//   // if row will have no content ensure <br> tag so it can hold the caret.
+//   if (fragmentForNewLine.textContent.length == 0) {
+//     div.innerHTML = '<br>';
+//   }
+//
+//   // insert the newly created row after current row
+//   rowEl.insertAdjacentElement('afterend', div);
+//
+//   // if rowEl is empty after moving the space down, then add a space back to ensure no rows are totally empty
+//   // this occurs when you hit enter on a row and the caret is at char:0 (first spot)
+//   // (empty rows can't hold a caret)
+//   if (rowEl.textContent.length === 0) {
+//     rowEl.innerHTML = '<br>';
+//   }
+//
+//   // move cursor to start of new row
+//   moveCursorToLineStart(div);
+//
+//   function moveCursorToLineStart(div) {
+//     var sel = window.getSelection();
+//     var range = sel.getRangeAt(0);
+//     // console.log('range', range);
+//     // range.deleteContents(); // actually delete the html in the range... interesting... Could be useful after cloning it...
+//     range.setStart(div.childNodes[0] || div, 0);
+//     range.setEnd(div.childNodes[0], 0);
+//     sel.removeAllRanges();
+//     sel.addRange(range);
+//   }
 
-  var rowEl = getActiveRowEl();
-
-  // create new row
-  var div = document.createElement('div');
-  div.className = 'row';
-
-  // cut out parts of old row that need to go in new row
-  var fragmentForNewLine = cutRowContentAfterCaret();
-  div.innerHTML = fragmentForNewLine.textContent;
-
-  // if row will have no content ensure <br> tag so it can hold the caret.
-  if (fragmentForNewLine.textContent.length == 0) {
-    div.innerHTML = '<br>';
-  }
-
-  // insert the newly created row after current row
-  rowEl.insertAdjacentElement('afterend', div);
-
-  // if rowEl is empty after moving the space down, then add a space back to ensure no rows are totally empty
-  // this occurs when you hit enter on a row and the caret is at char:0 (first spot)
-  // (empty rows can't hold a caret)
-  if (rowEl.textContent.length === 0) {
-    rowEl.innerHTML = '<br>';
-  }
-
-  // move cursor to start of new row
-  moveCursorToLineStart(div);
-
-  function moveCursorToLineStart(div) {
-    var sel = window.getSelection();
-    var range = sel.getRangeAt(0);
-    // console.log('range', range);
-    // range.deleteContents(); // actually delete the html in the range... interesting... Could be useful after cloning it...
-    range.setStart(div.childNodes[0] || div, 0);
-    range.setEnd(div.childNodes[0], 0);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  // TODO: move out of parent fn?
-  // returns a doc fragment of the content of the code row AFTER where the caret is, and removes from row
-  // (basically what you need if you hit "enter" in the middle or a row
-  function cutRowContentAfterCaret() {
-    var sel = window.getSelection();
-    //  https://developer.mozilla.org/en-US/docs/Web/API/Range/toString
-    var range = document.createRange();
-    range.setStart(sel.anchorNode, sel.anchorOffset); // HACK: needs a -1 if at the very end? WHY? isn't long enough? Maybe end is the problem? Set start before? or after?
-    range.setEndAfter(rowEl, 0);
-
-    // could use clone + delete, OR extract()
-    var docFragment = range.extractContents();
-
-    return docFragment;
-  }
-}
+// TODO: move out of parent fn?
+// returns a doc fragment of the content of the code row AFTER where the caret is, and removes from row
+// (basically what you need if you hit "enter" in the middle or a row
+//   function cutRowContentAfterCaret() {
+//     var sel = window.getSelection();
+//     //  https://developer.mozilla.org/en-US/docs/Web/API/Range/toString
+//     var range = document.createRange();
+//     range.setStart(sel.anchorNode, sel.anchorOffset); // HACK: needs a -1 if at the very end? WHY? isn't long enough? Maybe end is the problem? Set start before? or after?
+//     range.setEndAfter(rowEl, 0);
+//
+//     // could use clone + delete, OR extract()
+//     var docFragment = range.extractContents();
+//
+//     return docFragment;
+//   }
+// }
 
 // util fns
 
@@ -376,10 +409,6 @@ function handleBackspace() {
   // collapsed
   // IF
 }
-
-function addRow() {}
-
-function removeRow() {}
 
 // TODO: move this somewhere else?
 // TODO: extract this into non-anon function

@@ -95,6 +95,14 @@ export function sendUpdate(operation) {
 
   if (!operation.value) delete operation.value;
 
+  if (operation.insertChars) {
+    // loop through insert objects and remove keys with null values
+    for (var i = 0; i < operation.insertChars.length; i++) {
+      var char = operation.insertChars[i];
+      if (!char.insertAfter) delete char.insertAfter;
+    }
+  }
+
   operation.peer = PEER_ID;
   // console.log('operation.peer', operation.peer);
 
