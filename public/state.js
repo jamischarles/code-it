@@ -165,6 +165,7 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
 
   var BACKSPACE = 8;
   var ENTER = 13;
+  var TAB = 9;
   var key = e.keyCode;
   // console.log('e', e);
   //
@@ -174,29 +175,37 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
   // "BACKSPACE", "ENTER", and single chars
   // anything else get's killed right here
   // FIXME: could just replace the else statement below with a if key.length check and don't have an else...
-  if (key != BACKSPACE && key != ENTER && e.key.length > 1) return;
+  // if (key != BACKSPACE && key != ENTER && e.key.length > 1) return;
 
   // cancel the default event behavior for the keys we're handling manually
   // FIXME: is this even needed?
-  e.preventDefault();
 
   if (key === BACKSPACE) {
     // console.log('DELETE:', `${pos.line}:${pos.charPosition}`);
     // TODO: Make sugar for delete(0), insert(1, 'h','e');
     // debugger;
     applyOperationToState('delete', pos);
+    e.preventDefault();
     // swap ENTER for \n
   } else if (key === ENTER) {
     applyOperationToState('insert', pos, '\n');
+    e.preventDefault();
+  } else if (key === TAB) {
+    applyOperationToState('insert', pos, '\v');
+    e.preventDefault();
   } else {
-    applyOperationToState('insert', pos, e.key);
+    // // ignore any key that isn't a single char that also wasn't handled above
+    if (e.key.length < 2) {
+      applyOperationToState('insert', pos, e.key);
+      e.preventDefault();
+    }
     // console.log('INSERT:', `${pos.line}:${pos.charPosition}:${e.key} `);
   }
   // what keystroke
   // WHERE
   //
   //
-  e.preventDefault();
+  // e.preventDefault();
 }
 
 // FIXME: move  to utils

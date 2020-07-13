@@ -17,6 +17,7 @@ import {
   writeHtmlStrFromState,
   renderOwnCaret,
   renderPeerCarets,
+  renderPeerSelections,
 } from './render';
 import {
   updateRowIfNeeded,
@@ -392,6 +393,8 @@ function removeRow() {}
 // FIXME: consider using a simple hooks / pub sub system?
 // FIXME: do we want to highlight before we fetch the code from firebase? We'll have to see about cost. For now, yes...
 function init(rowsContainerEl) {
+  renderPeerSelections();
+
   // highlightEachRow(rows);
   renderToDom(rowsContainerEl, writeHtmlStrFromState(getState()));
 

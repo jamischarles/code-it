@@ -95,6 +95,14 @@ export function writeHtmlStrFromState(state, row) {
     posCacheById[char.id] = content[i];
     posCacheById[char.id].pos = {line: lineCounter, charPosition: posCounter};
 
+    // handle tab chars...
+    if (val === '\v') {
+      // val = '&#9;';
+      // val = '__TAB__';
+      // TODO: write a prism plugin that replaces custom char input with custom char output...
+      // U+0009
+    }
+
     // if we encounter a new line, flush the buffer to array
     if (val === '\n') {
       if (currentRowStr === '') {
@@ -168,7 +176,18 @@ export function writeHtmlStrFromState(state, row) {
 // turn raw html into code
 function tokenize(str) {
   // tokenize the current row content...
-  return Prism.highlight(str, Prism.languages.javascript, 'javascript');
+  var tokenized = Prism.highlight(
+    str,
+    Prism.languages.javascript,
+    'javascript',
+  );
+
+  // replace my custom chars with the proper html values I want...
+  // debugger;
+  // return tokenized.replace(/__TAB__/g, "<span class='tab'></span>");
+  // return tokenized.replace(/__TAB__/g, '&#9;');
+  // return tokenized.replace(/\v/g, '&#9;'); // replace tab char with html tab entity
+  return tokenized.replace(/\v/g, "<span class='tab'>&nbsp;</span>");
 }
 
 // FIXME: add some vDom diffing either here, or in renderToDom
@@ -290,6 +309,20 @@ export function renderPeerCarets(peerState) {
   // console.log('##char', char);
 
   // if (char) {
+  // }
+}
+
+export function renderPeerSelections() {
+  // var canvas = document.getElementById('p-selections');
+  // var ctx = canvas.getContext('2d');
+  //
+  // ctx.fillStyle = 'rgb(200, 0, 0)';
+  // ctx.fillRect(10, 10, 50, 50);
+  // if (canvas.getContext) {
+  //   var ctx = canvas.getContext('2d');
+  //   // drawing code here
+  // } else {
+  //   // canvas-unsupported code here
   // }
 }
 
