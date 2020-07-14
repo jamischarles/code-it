@@ -208,22 +208,50 @@ editor.addEventListener('keyup', function(e) {
 });
 
 // handle cut event...
-
-// handle paste event...
-//
-
-document.addEventListener('paste', event => {
+document.addEventListener('cut', event => {
   debugger;
+  var pos;
   var rowEl = getActiveRowEl();
   if (rowEl) {
-    var pos = saveCaretPos(rowEl);
+    pos = saveCaretPos(rowEl);
   } else {
     console.log('warning index.js: expected rowEl but couldn\t get it...');
     pos = {line: 0, charPosition: 0}; // hacky override?
   }
 
+  // https://developer.mozilla.org/en-US/docs/Web/API/Element/cut_event
+  const selection = document.getSelection();
+  // event.clipboardData.setData('text/plain', selection.toString().toUpperCase());
+  // manually save the selection to clipboard because we are preventing the event from bubbling up later, so this is isn't occurring...
+  event.clipboardData.setData('text/plain', selection);
+
   generateSimpleOperationFromKeystroke(event, pos);
 });
+
+// handle paste event...
+//
+
+document.addEventListener('paste', event => {
+  var pos;
+  var rowEl = getActiveRowEl();
+  if (rowEl) {
+    pos = saveCaretPos(rowEl);
+  } else {
+    console.log('WARNING index.js: expected rowEl but couldn\t get it...');
+    pos = {line: 0, charPosition: 0}; // hacky override?
+  }
+
+  generateSimpleOperationFromKeystroke(event, pos);
+});
+
+// disallow dragging text
+document.addEventListener(
+  'dragstart',
+  function(e) {
+    e.preventDefault();
+  },
+  false,
+);
 
 // editor.addEventListener('paste', event => {
 //   let paste = (event.clipboardData || window.clipboardData).getData('text');

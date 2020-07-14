@@ -185,28 +185,16 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
   // handle paste
   // this is fired from cut & paste event handlers...
   if (e.type === 'paste') {
-    // turn this into many ops, or a single one and have state manage it...
-    // latter
-
-    // FIXME: can / should we simplify this? Do we even need the latter?
-    // // FIXME: do we even need to listen for paste event? Or should we send this at a highler level... For now... leave this in. Nice to have a hook if we need it...
     let pasteText = e.clipboardData.getData('text');
     // let pasteText = (e.clipboardData || window.clipboardData).getData('text');
-
     applyOperationToState('insert', pos, pasteText);
-    console.log(`##PASTE: ${pos}, ${pasteText}`);
     e.preventDefault();
-
-    // do nothing
-
-    // handle paste
-    //
 
     // block all other meta keys
   } else if (e.metaKey) {
     // can't prevent this on keyDown, bc it'll block paste, copy, cut ops etc...
     // e.preventDefault();
-  } else if (key === BACKSPACE) {
+  } else if (key === BACKSPACE || e.type === 'cut') {
     // console.log('DELETE:', `${pos.line}:${pos.charPosition}`);
     // TODO: Make sugar for delete(0), insert(1, 'h','e');
     // debugger;
