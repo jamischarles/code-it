@@ -29,6 +29,7 @@ setTimeout(() => (initPhase = false), 2000);
 import {getCharPosFromSelectionObj, getActiveRowEl} from './prism_exp';
 import {getCharAtPosition} from './render';
 import {getSelfPeerId} from './firebase';
+import {saveToUndoStack, getUndoOp, getRedoOp} from './undo';
 
 // state starts as empty...
 // var state = {};
@@ -155,6 +156,8 @@ export function getPositionFromChar(id) {}
 // DELETE (tombstone)
 // MOVE (DELETE, INSERT)
 // REPLACE (same char, same id get's reassigned)
+// FIXME: move this to index.js because this is basically handling keyStrokes...
+// or move most of this logic to a keyHandling function...
 export function generateSimpleOperationFromKeystroke(e, pos) {
   // start with simple, 1 char changes. Then we'll focus on selected operations...
   // Then look at multi line operations and PASTE operations
@@ -167,7 +170,7 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
   var ENTER = 13;
   var TAB = 9;
   var key = e.keyCode;
-  // console.log('e', e);
+  console.log('e', e);
   //
 
   // OPT IN
@@ -179,6 +182,12 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
 
   // cancel the default event behavior for the keys we're handling manually
   // FIXME: is this even needed?
+  //
+  //
+
+  //bind undo/redo...
+  //TODO: Consider adding undo/redo buttons on UI (esp for mobile) (or on mobile keyboard)
+  // let's bind cmd+z and ctrl+z
 
   // if cmd is being held down or pressed, don't insert it
   // handle cut
@@ -192,6 +201,20 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
 
     // block all other meta keys
   } else if (e.metaKey) {
+    // fall through to normal functionality (helpful for select all, cut, copy paste etc...
+    // handle undo cmd+z
+    if (e.key === 'z' && e.shiftKey === false) {
+      let op = getUndoOp();
+      if (op) updateState(op, false, true);
+      e.preventDefault();
+      // handle REDO with cmd+Z
+    } else if (e.key === 'z' && e.shiftKey === true) {
+      let op = getRedoOp();
+      console.log('REDO: op', op);
+      if (op) updateState(op, false, true);
+      e.preventDefault();
+    }
+  } else if (e.ctrlKey) {
     // can't prevent this on keyDown, bc it'll block paste, copy, cut ops etc...
     // e.preventDefault();
   } else if (key === BACKSPACE || e.type === 'cut') {
@@ -294,8 +317,9 @@ export function getSelectionRangeBoundaries() {
 // so typing at 0 should use START of parentNode as the marker, and not the first char...
 // typing at end of line should use the last char as marker, and not END of line...
 // if it's a remote op, don't add it to the opQueue... (causes infinite loop)
-function updateState(op, isRemoteOp) {
-  debugger;
+// FIXME: if we need any more opts, add opts obj as 2nd param...
+function updateState(op, isRemoteOp, isUndoRedoOp) {
+  // debugger;
   // official ones we should log.
   // Always log the OP, opt in/out to before/after...
   // BEFORE state
@@ -310,6 +334,7 @@ function updateState(op, isRemoteOp) {
 
   var {type} = op;
   var charsToInsert = [];
+  var charIDsToResurrect = {}; // obj instead of array so we don't have to loop through this list on EVERY charItem... and lookup is much much cheaper.
 
   // loop through the row...
   // TODO: consider having separate fn for each row we process...
@@ -326,6 +351,11 @@ function updateState(op, isRemoteOp) {
   // FIXME: replace this with fewer loops eventually...
   // if needed...
   // find char where we need to perform op
+
+  if (type === 'resurrect') {
+    // assign all IDs to resurrect to obj so we can scan cheaper...
+    op.resurrectChars.forEach(id => (charIDsToResurrect[id] = true));
+  }
 
   // insert our new char
   // FIXME: extract these into separate fns?
@@ -407,6 +437,13 @@ function updateState(op, isRemoteOp) {
   // single loop should be better for perf than alternatives
   for (var i = 0; i < state.content.length; i++) {
     var curChar = state.content[i];
+
+    // check for resurrection op. If it exists, un-tombstone the char
+    if (charIDsToResurrect[curChar.id]) {
+      curChar.tombstone = false;
+      var lastCharResurrected = curChar; // FIXME: Better way to store this? Is order guaranteed for this? Need this to know where caret goes after undo
+    }
+
     if (!curChar.tombstone) {
       liveContent.push(curChar);
     }
@@ -459,7 +496,9 @@ function updateState(op, isRemoteOp) {
   // must be after state because it
   if (!isRemoteOp) {
     var lastCharInserted = charsToInsert[charsToInsert.length - 1];
-    caret = updateOwnCaretPos(lastCharInserted || focusedItem);
+    caret = updateOwnCaretPos(
+      lastCharInserted || focusedItem || lastCharResurrected,
+    );
   }
 
   // if peer deleted the char our caret is attached to, update caretPos so it can fetch the adjacent live char to attach caret to
@@ -491,6 +530,11 @@ function updateState(op, isRemoteOp) {
     // charId is the ID of the char which is assigned at insertion / creation so we have a unique ID for each char ever created
     // op.charId = op.charId || lastCharInserted.id; // naive assumption: only time op.charId will be missing is when we
     opQueue.push(op);
+
+    // only apply to undo redo stack if this op didn't come directly from that stack
+    if (!isUndoRedoOp) {
+      saveToUndoStack(op);
+    }
     // console.log('OP Inserted to Queue:', op);
   }
 
@@ -710,7 +754,7 @@ function applyOperationToState(opName, pos, chars) {
   }
 
   // loop through the operations we need to apply
-  operations.forEach(op => updateState(op, false));
+  operations.forEach(op => updateState(op, false, false));
 
   // all done applying updates. fire any subscribed events... to re-render the DOM
   // callSubscribers();
@@ -738,7 +782,7 @@ export function mergeRemoteOperation(op) {
     console.log('## IGNORING REMOTE op from self:', op);
   } else {
     console.log('## REMOTE op to apply:', op);
-    updateState(op, true);
+    updateState(op, true, false);
   }
 
   // TODO: ensure updating state from remote doesn't fire more FB updates (INFINITE LOOP)
