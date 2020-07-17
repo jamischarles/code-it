@@ -166,20 +166,44 @@ export function getCharPosFromSelectionObj(rowEl, focusedNode, offset) {
     return {line: rowNum, charPosition: charCount};
   }
 
-  curNode = curNode.previousSibling || curNode.parentNode.previousSibling;
+  // curNode = curNode.previousSibling || curNode.parentNode.previousSibling;
+  curNode = findNearestPrevSibling(curNode, rowEl);
+
   while (curNode) {
     var length = curNode.length || curNode.textContent.length; // if textnode, it has length, else we can get the textContent of the tag
     charCount += length;
     // ensure we don't visit the rowEl parentNode. It's child is as high as we should go
     // FIXME: simplify this logic...
-    // visit the previoesSibling. If NO previusSibling, go up a level, but ONLY if that level isn't a <div class="row"> el
-    curNode =
-      curNode.previousSibling ||
-      (curNode.parentNode !== rowEl && curNode.parentNode.previousSibling);
+    // visit the previousSibling. If NO previousSibling, go up a level, but ONLY if that level isn't a <div class="row"> el
+    // curNode =
+    //   curNode.previousSibling ||
+    //   (curNode.parentNode !== rowEl && curNode.parentNode.previousSibling);
+    curNode = findNearestPrevSibling(curNode, rowEl);
     // childNumber++;
   }
 
   return {line: rowNum, charPosition: charCount};
+}
+
+// goes up the tree until a previousSibling is found OR until the root node is found...
+// get prior sibling. Go UP levels if you have to (until the rootnode)
+// FIXME: add unit tests around this...?
+function findNearestPrevSibling(startNode, rootNode) {
+  // don't go higher than the rootNode
+  var curNode = startNode;
+  var prevSibling = startNode.previousSibling;
+
+  // if there's no prevSibling, and we aren't at the root, keep going up the tree until we find a previous sibling
+  while (!prevSibling && curNode.parentNode !== rootNode) {
+    curNode = curNode.parentNode;
+    prevSibling = curNode.previousSibling;
+
+    // if we found the node, return and bail
+    if (prevSibling) return prevSibling;
+  }
+
+  // if we can't go farther return undef
+  return prevSibling;
 }
 
 // FIXME: Add some unit  test around this...
