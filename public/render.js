@@ -6,6 +6,7 @@ import Prism from 'prismjs';
 import {
   restoreCaretPos,
   getRangeFromPosition,
+  getRangeFromStartAndEndPosition,
   getActiveRowEl,
 } from './prism_exp';
 import {getSelfPeerId} from './firebase';
@@ -19,7 +20,12 @@ import {getCharById, getLiveCharFromDeadOne, getState} from './state';
 // - vDom stuff. Old vs new row content so we can see where and how to inserts content
 var renderCacheByRows = [[]]; // start with single row
 
+// key: id
 var posCacheById = {};
+
+function getRowLengthFromRenderCache(rowNum) {
+  return renderCacheByRows[rowNum].length;
+}
 
 export function getPositionFromCharId(charId) {
   // implementation details... Subject to change later...
@@ -31,6 +37,7 @@ export function getPositionFromCharId(charId) {
 // return the char rendered to this pos during the last render cycle (cached)
 // if you don't want it to charPos:--1, pass exactPosition == true (needed when getting ranges of chars)
 // FIXME: maybe we should move the --1 to another spot... It is nice having it in 1 place though...
+// FIXME: If the 2nd param for ranges causes confusion, just make it a separate fn that just returns it...
 export function getCharAtPosition(pos, exactPosition) {
   var {line, charPosition} = pos;
 
@@ -71,7 +78,7 @@ export function renderHTMLFromState(state) {}
 // returns  ['row1Content', 'row2Coentent'] etc
 // FIXME: can we simplify this... esp the row and line counting logic?
 export function writeHtmlStrFromState(state, row) {
-  console.log('##state', state);
+  // console.log('##state', state);
 
   posCacheById = {}; // reset position cache
   renderCacheByRows = [[]]; // reset renderCache
@@ -89,6 +96,15 @@ export function writeHtmlStrFromState(state, row) {
     var char = content[i];
     var val = char.value;
 
+    // console.log(`#99 SELECTION POS: ${lineCounter}:${posCounter}`);
+    // console.log('#99 SELECTION val', val);
+    // console.log('#99 SELECTION char.id', char.id);
+    // console.log('#99 SELECION posCounter', posCounter);
+
+    // override char position object with what matches what will be rendered.
+    // FIXME: This is needed because the prior value is inaccurate. Is this happening in updateState()?
+    // Q: Should we remove char positions from there? It probably won't be accurate...
+    char.pos = {line: lineCounter, charPosition: posCounter};
     renderCacheByRows[lineCounter].push(char); // save the current item to the renderCache for easy position lookups after
 
     // save off current char to posCache so we can easily retrieve position later
@@ -169,7 +185,7 @@ export function writeHtmlStrFromState(state, row) {
     rows.push('<br>');
   }
 
-  console.log('##rows to RENDER', rows);
+  // console.log('##rows to RENDER', rows);
   return rows;
 }
 
@@ -193,8 +209,8 @@ function tokenize(str) {
 // FIXME: add some vDom diffing either here, or in renderToDom
 // Do that after we have multi rows working...
 export function renderToDom(node, htmlRows, cb) {
-  console.log('##renderToDom: node', node);
-  console.log('##renderToDom: html', htmlRows);
+  // console.log('##renderToDom: node', node);
+  // console.log('##renderToDom: html', htmlRows);
   var html = '';
   htmlRows.forEach(rowContent => {
     html += `<div class="row">${rowContent}</div>`;
@@ -207,7 +223,7 @@ export function renderToDom(node, htmlRows, cb) {
 }
 
 //FIXME: replace this with a dom ref in state or similar...
-function getRowByIndex(i) {
+export function getRowByIndex(i) {
   var rows = document.querySelector('.rows');
 
   return rows.children[i];
@@ -252,9 +268,9 @@ export function renderOwnCaret() {
   // if we need to render caret after a \n newline char, jump pos to next line.
   if (caretObj.afterChar && caretObj.afterChar.value === '\n') {
     rowEl = getRowByIndex(pos.line + 1);
-    console.log('##rowEl', rowEl);
+    // console.log('##rowEl', rowEl);
     var r = document.querySelector('.rows');
-    console.log('##.rows', r);
+    // console.log('##.rows', r);
     charPos = 0;
   }
 
@@ -267,7 +283,7 @@ export function renderOwnCaret() {
 // If it has, then update the caret pos...
 // We'll also want to show/hide based on who is online...
 export function renderPeerCarets(peerState) {
-  console.log('renderPeer: peerState', peerState);
+  // console.log('renderPeer: peerState', peerState);
   //a7
 
   // get online peers (should be cached locally) in state...
@@ -299,7 +315,7 @@ export function renderPeerCarets(peerState) {
     fragment.appendChild(caretEl);
   });
 
-  console.log('RENDER peer carets: caretsHTML', fragment);
+  // console.log('RENDER peer carets: caretsHTML', fragment);
   document.getElementById('carets').innerHTML = ''; // wipe out all the children
   document.getElementById('carets').appendChild(fragment);
 
@@ -312,7 +328,113 @@ export function renderPeerCarets(peerState) {
   // }
 }
 
-export function renderPeerSelections() {
+// array of peers
+export function renderPeerSelections(peerState = []) {
+  var peerSelectionsToRender = [];
+
+  peerState.forEach(peer => {
+    if (peer.selStart && peer.selEnd) {
+      peerSelectionsToRender.push({
+        peerId: peer.peerId,
+        start: peer.selStart,
+        end: peer.selEnd,
+      });
+    }
+  });
+
+  var fragment = document.createDocumentFragment();
+  peerSelectionsToRender.forEach(selection => {
+    // don't render selection caret for myself. Only selections for other peers
+    //
+    // comment this out for easy debugging
+    if (getSelfPeerId() === selection.peerId) return;
+    // only render self selection
+    // if (getSelfPeerId() != selection.peerId) return;
+
+    var startChar = selection.start;
+    var endChar = selection.end;
+
+    var startPos = getPositionFromCharId(startChar);
+    var endPos = getPositionFromCharId(endChar);
+
+    // console.log('#-1 SELECTION: renderCacheByRows', renderCacheByRows);
+    // console.log('#-1 SELECTION: posCacheById', posCacheById);
+    // console.log('#-1 SELECTION: selection', selection);
+    // console.log('#-1 SELECTION: startChar', startChar);
+    // console.log('#-1 SELECTION: startPos', startPos);
+    // console.log('#-1 SELECTION: endChar', endChar);
+    // console.log('#-1 SELECTION: endPos', endPos);
+
+    // shift right by one char so it's in the right place...
+    // startPos.charPosition++;
+    // endPos.charPosition++;
+
+    // FIXME: We want to create a range for each row that the selection is a part of...
+    // Then we draw a selection div for each of those...
+    // So...
+    // 1) For each row that's in the selection, get:
+    // - x, startPos
+    // - number of chars on line (or xy for end of line)
+    // 2) Render the range for that row
+    // 3) Do the same for each row
+
+    // make 1 selection range for each row that's selected
+    var selectionRangesByRow = [];
+    var startRow = startPos.line;
+    var endRow = endPos.line;
+
+    // debugger;
+
+    // FIXME: simplify this whole function!
+    for (var i = startRow; i <= endRow; i++) {
+      // start/end for current row
+      let rowStartPos = {
+        line: i,
+        charPosition: 0,
+      };
+
+      // if on first row, use the startPosition instead of beginning of line
+      if (startRow === i) rowStartPos.charPosition = startPos.charPosition;
+
+      let rowEndPos = {
+        line: i,
+        charPosition: getRowLengthFromRenderCache(i) - 1, // basically the index of the last char in the row
+        // can I just calc it smartly...
+      };
+
+      // if on last row, use the endPosition instead of end of line
+      if (endRow === i) rowEndPos.charPosition = endPos.charPosition;
+
+      // console.log('#0 SELECTION: startPos', rowStartPos);
+      // console.log('#0 SELECTION: rowEndPos', rowEndPos);
+
+      let selectionRange = getRangeFromStartAndEndPosition(
+        rowStartPos,
+        rowEndPos,
+      );
+      selectionRangesByRow.push(selectionRange);
+    }
+
+    // console.log('SELECTION: selectionRangesByRow', selectionRangesByRow);
+    // console.log('SELECTION: selectionRange', selectionRange);
+
+    selectionRangesByRow.forEach(range => {
+      var peerId = range.peerId;
+      var selEl = createPeerSelectionHTML(peerId, range, 0);
+      fragment.appendChild(selEl);
+    });
+    //
+  });
+
+  document.getElementById('peer-selections').innerHTML = ''; // wipe out all the children
+  document.getElementById('peer-selections').appendChild(fragment);
+
+  // measure pixel place
+  // get start pos, width for each row of selection needed
+  //
+  //
+  // get ending pos and which row (y pos...)
+
   // var canvas = document.getElementById('p-selections');
   // var ctx = canvas.getContext('2d');
   //
@@ -324,6 +446,69 @@ export function renderPeerSelections() {
   // } else {
   //   // canvas-unsupported code here
   // }
+}
+
+// FIXME: use this...
+function createPeerSelectionHTML(peerName, range, count) {
+  // var rowEl = getRowByIndex(caretPos.line);
+  // var range = getRangeFromPosition(rowEl, caretPos.charPosition + 1); // +1 because we need to render the caret AFTER the charId position...
+  // console.log('caretPos.charPosition', caretPos.charPosition);
+  // get x,y position of caret where peer caretIs
+  // console.log('## range', range);
+  var peerRect = range.getBoundingClientRect();
+
+  // console.log('SELECTION:: peerRect', peerRect);
+
+  //TODO: make getRangeFromCharPos()
+  // var range = document.createRange();
+  // range.setStart(sel.anchorNode, sel.anchorOffset); // HACK: needs a -1 if at the very end? WHY? isn't long enough? Maybe end is the problem? Set start before? or after?
+  // range.setEndAfter(rowEl, 0);
+  //
+
+  // we can simulate this virtually by adding nodes to a range...  (or a single char?)
+  // FIXME: THIS is the way to go...
+  // WOW THIS WORKED AMAZING.
+  // TODO: SAVE THIS TECHNIQUE and write it down for making a virtual, custom styled caret that follows around the real caret...
+  //
+  //
+  // SAVE: technique for adding vCaret on top of real caret
+  // 1. On selection change, call this
+  // 2. get range obj from current selection (will return exact caret pos
+  // 3. use range.getBoundingClientRect() to get abs position of caret
+  // 4. use .top and .left of that to abs position a 1px by 18px stylized caret on top of the real caret
+  // 5. MAGIC
+  // This same technique will work to render peer carets and peer selections...
+  // var rect = window
+  //   .getSelection()
+  //   .getRangeAt(0)
+  //   .getBoundingClientRect();
+
+  // console.log('############peerRect', peerRect);
+
+  var sel = document.createElement('span');
+  sel.className = 'peer-selection';
+  sel.id = 'peer-selection-' + count;
+
+  // https://javascript.info/coordinates AMAZING
+  // Take scrollPos (with pageYOffset) into account so it's perfectly aligned the first time with abs pos, regardless of where the scrollPosition is
+  sel.style.top = peerRect.top + window.pageYOffset;
+  sel.style.left = peerRect.left + window.pageXOffset;
+  sel.style.width = peerRect.width;
+
+  return sel;
+
+  // Q: Can we get the v caret to follow the caret with this technique?
+
+  // Q: Could we create a range exactly where it neeeds to be (in vdom if needed)
+  // - Then get range.getBoundingClientRect() or range.getClientRects()
+
+  // range = document.createRange();
+  // range.selectNode(document.getElementsByTagName("div").item(0));
+  // rectList = range.getClientRects();
+
+  // Q: How do we measure the distance exactly?
+  // We could make a clone and measure that?
+  // insert a real span and measure the exact distance to that point...?
 }
 
 function createPeerCaretHTML(peerName, caretPos, count) {
@@ -364,8 +549,10 @@ function createPeerCaretHTML(peerName, caretPos, count) {
   caret.className = 'peer-caret';
   caret.id = 'peer-caret-' + count;
 
-  caret.style.top = peerRect.top;
-  caret.style.left = peerRect.left;
+  // https://javascript.info/coordinates AMAZING
+  // Take scrollPos (with pageYOffset) into account so it's perfectly aligned the first time with abs pos, regardless of where the scrollPosition is
+  caret.style.top = peerRect.top + window.pageYOffset;
+  caret.style.left = peerRect.left + window.pageXOffset;
 
   return caret;
 

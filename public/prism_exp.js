@@ -1,5 +1,7 @@
 import Prism from 'prismjs';
 
+import {getRowByIndex} from './render';
+
 // TODO: we'll want to eventually tototaly control the DOM and not let the editor handle new row additiosn because of rare quirks there...
 
 var editor = document.getElementById('editor');
@@ -56,30 +58,31 @@ export function getActiveRowEl(forceAnchorNode) {
 
 // should we update the innerHTML? If yes, update it, and save/restore caret.
 // FIXME: turn this into a line by line diff to see what's dirty and what's clean... Similar to vDom dirty checks...
-export function updateEditorWithNewCode(newRawCode) {
-  // current tokenized code
-  var oldCode = editor.innerHTML;
-
-  // tokenize the new code so we can diff it.
-  var newCode = Prism.highlight(
-    newRawCode,
-    Prism.languages.javascript,
-    'javascript',
-  );
-
-  // console.log('oldCode', oldCode);
-  // console.log('newCode', newCode);
-
-  if (oldCode !== newCode) {
-    console.log('Code changed remotely. Update editor');
-    // setEditorCode(editor, newCode);
-    // setEditorCode(editor, prepNewMarkup(newRawCode).join(''));
-  } else {
-    console.log('Code has NOT changed remotely. NO updates.');
-  }
-
-  console.log('prepNewMarkup(newRawCode)', prepNewMarkup(newRawCode));
-}
+// DELETE
+// export function updateEditorWithNewCode(newRawCode) {
+//   // current tokenized code
+//   var oldCode = editor.innerHTML;
+//
+//   // tokenize the new code so we can diff it.
+//   var newCode = Prism.highlight(
+//     newRawCode,
+//     Prism.languages.javascript,
+//     'javascript',
+//   );
+//
+//   // console.log('oldCode', oldCode);
+//   // console.log('newCode', newCode);
+//
+//   if (oldCode !== newCode) {
+//     console.log('Code changed remotely. Update editor');
+//     // setEditorCode(editor, newCode);
+//     // setEditorCode(editor, prepNewMarkup(newRawCode).join(''));
+//   } else {
+//     console.log('Code has NOT changed remotely. NO updates.');
+//   }
+//
+//   console.log('prepNewMarkup(newRawCode)', prepNewMarkup(newRawCode));
+// }
 
 //
 function prepNewMarkup(newContent) {
@@ -210,6 +213,7 @@ function findNearestPrevSibling(startNode, rootNode) {
 // Use this when there's an active caret and we only care about storing that pos and not about the selection
 // FIXME: maybe we can remove this one and just use the other one...
 export function saveCaretPos(rowEl) {
+  // debugger;
   // try #1: test position along with other data
   if (!rowEl) throw new Error('PLEASE PASS A rowEl PARAM!!!');
 
@@ -282,6 +286,51 @@ export function getRangeFromPosition(rowEl, charPosition) {
   var range = document.createRange();
   range.setStart(node, offset); // works pretty well too. Maybe even better on brackets...
   range.collapse(true);
+
+  return range;
+}
+
+// FIXME: combine this with prior one and just handle both use cases?
+export function getRangeFromStartAndEndPosition(startPos, endPos) {
+  if (!startPos) throw new Error('Please pass a startPos obj');
+  if (!endPos) throw new Error('Please pass a endPos obj');
+
+  // shift right by one char so it's in the right place...
+  // startPos.charPosition++;
+  // endPos.charPosition++;
+
+  // FIXME: these numbers are VERY FLAXY
+  // console.log('#1 SELECTION: startPos', startPos);
+  // console.log('#1 SELECTION: endPos', endPos);
+
+  var start = findNodeFromCharPos(
+    getRowByIndex(startPos.line),
+    startPos.charPosition,
+  );
+  var end = findNodeFromCharPos(
+    getRowByIndex(endPos.line),
+    endPos.charPosition,
+  );
+
+  // you can select the newLine char at the end of the line... deleting that removes a newline
+  // Q: How do you add a char that the caret ignores but selection doesn't?
+  // basically we need to allow selection of the \n char at the end of the line...
+  // Browser already does this natively... How can we emulate that with peerselection?
+
+  if (!start) debugger;
+  if (!end) debugger;
+
+  // fallback. if no node is found, use the rowEl node. happens in rare cases like when you have 1 char, and you delete it.
+  var selStartNode = (start && start.node) || getRowByIndex(startPos.line);
+  var selStartOffset = (start && start.offset) || 0;
+
+  var selEndNode = (end && end.node) || getRowByIndex(endPos.line);
+  var selEndOffset = (end && end.offset) || 0;
+
+  var range = document.createRange();
+  range.setStart(selStartNode, selStartOffset); // works pretty well too. Maybe even better on brackets...
+  range.setEnd(selEndNode, selEndOffset);
+  // range.collapse(true);
 
   return range;
 }

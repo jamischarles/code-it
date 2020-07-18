@@ -75,9 +75,8 @@ code[class*="language-"] {
   <div class="parent">
     <div><strong>Peers online</strong>: <span id="online-peers"></span> </div>
     <div><strong>Status</strong>: <span id="online-status"></span> </div>
-<style>.peer-caret{
-
-/* TODO: figure out how to swap the colors... */
+<style>
+.peer-caret{
   background-color: red;
   display: block;
   height: 18px;
@@ -91,7 +90,18 @@ code[class*="language-"] {
 .peer-caret:nth-child(4) { background-color: white; }
 .peer-caret:nth-child(5) { background-color: purple; }
 
-canvas { border: 1px solid black; }
+
+/* PEER SELECTION STYLES */
+.peer-selection{
+  background-color: red;
+  display: block;
+  height: 18px;
+  position: absolute;
+  opacity: .5;
+  pointer-events: none; /* Allows us to click through this layer */
+  /* https://css-tricks.com/almanac/properties/p/pointer-events/ */
+  /* width: 1px; */
+}
 
 
 .tab {
@@ -104,26 +114,7 @@ canvas { border: 1px solid black; }
 
 </style>
     <div id="carets"><span id="caret-one" class="caret"></span></div>
-    <div id="peer-selections">
-<!--       <svg width="200" height="250" version="1.1" xmlns="http://www.w3.org/2000/svg"> -->
-<!--         <rect x="10" y="10" width="30" height="30" stroke="black" fill="transparent" stroke&#45;width="5"/> -->
-<!-- <rect x="60" y="10" rx="10" ry="10" width="30" height="30" stroke="black" fill="transparent" stroke&#45;width="5"/> -->
-<!--  -->
-<!--   <circle cx="25" cy="75" r="20" stroke="red" fill="transparent" stroke&#45;width="5"/> -->
-<!--   <ellipse cx="75" cy="75" rx="20" ry="5" stroke="red" fill="transparent" stroke&#45;width="5"/> -->
-<!--  -->
-<!--   <line x1="10" x2="50" y1="110" y2="150" stroke="orange" stroke&#45;width="5"/> -->
-<!--   <polyline points="60 110 65 120 70 115 75 130 80 125 85 140 90 135 95 150 100 145" -->
-<!--       stroke="orange" fill="transparent" stroke&#45;width="5"/> -->
-<!--  -->
-<!--   <polygon points="50 160 55 180 70 180 60 190 65 205 50 195 35 205 40 190 30 180 45 180" -->
-<!--       stroke="green" fill="transparent" stroke&#45;width="5"/> -->
-<!--  -->
-<!--   <path d="M20,230 Q40,205 50,230 T90,230" fill="none" stroke="blue" stroke&#45;width="5"/> -->
-<!--  -->
-<!--  -->
-<!--         </svg> -->
-        </div>
+    <div id="peer-selections"></div>
 
     <pre class="language-javascript"><code id="editor" class="editor language-javascript" contenteditable="true"><div class="rows"><div class="row">Oh oh. Loading failed... </div></div></code></pre>
 
@@ -154,6 +145,17 @@ canvas { border: 1px solid black; }
       // 4. There's enough quirks with 2, that we're better off virtualizing it so we can enforce consistent behavior. It basically just means that we use the browser primitives and disable the default quirky behavior...
 
       window.Prism = window.Prism || {};
+    //   window.Prism.plugins.NormalizeWhitespace.setDefaults({
+    //     'remove-trailing': true,
+    //     'remove-indent': true,
+    //     'left-trim': true,
+    //     'right-trim': true,
+    //     #<{(|'break-lines': 80,
+    // 'indent': 2,
+    // 'remove-initial-line-feed': false,
+    // 'tabs-to-spaces': 4,
+    // 'spaces-to-tabs': 4|)}>#
+    //   });
       window.Prism.manual = true;
     </script>
     <script src="./index.js"></script>

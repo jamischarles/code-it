@@ -135,13 +135,6 @@ export function getFirstLiveChar(lineNum) {
   return firstLiveChar;
 }
 
-// returns the row obj...
-// FIXME: add IDs to rows so we can easily grab by refs...
-// or we should just store a JS ref to the live nodes...
-// export function getRowFromLineNum(rowNum) {
-//   return state.rows[rowNum];
-// }
-
 // TODO: consider storing the line & pos with the char...
 export function getPositionFromChar(id) {}
 
@@ -248,6 +241,7 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
 // FIXME: move  to utils
 export function getSelectionRangeBoundaries() {
   var selObj = window.getSelection();
+  debugger;
   // var selRange = selObj.getRangeAt(0);
   // console.log('selObj', selObj);
   // console.log('selObj:1', selObj.anchorOffset);
@@ -297,6 +291,7 @@ export function getSelectionRangeBoundaries() {
   ) {
     returnVal = {
       start: endPos,
+      // same counting as above
       end: startPos,
     };
   }
@@ -305,9 +300,15 @@ export function getSelectionRangeBoundaries() {
   if (startPos.line > endPos.line) {
     returnVal = {
       start: endPos,
+      // same counting as above
       end: startPos,
     };
   }
+
+  // take one off the end, because these are offsets (not zero based)
+  // ex: selecting 'jamis' at beginning of line would show endPos as '5', when we want it to be 4 (in zero based count)
+  // FIXME: NOT NEEDED because we're using this to create a range anyway...
+  // returnVal.end.charPosition--;
 
   return returnVal;
 }
@@ -519,6 +520,7 @@ function updateState(op, isRemoteOp, isUndoRedoOp) {
     ...state,
     content,
     liveContent,
+    peers: state.peers, // this is ONLY updated from updatePeers(). TODO: consider moving it to a separate state store entirely...
     caret: caret || state.caret, // new caret pos or old caret pos
   };
 
@@ -573,7 +575,7 @@ export function updateOwnCaretPos(idOrObj, startSel, endSel) {
   };
 
   // fire caret saved event here...
-  console.log('## own caret pos updated', state.caret);
+  // console.log('## own caret pos updated', state.caret);
   // returns new caret obj
   return state.caret;
 }
@@ -609,7 +611,7 @@ function updateCaretPosition(id) {}
 // TODO: for selection testing you need to test rtl vs ltr. It makes a difference!
 // FIXME: simpilfy the logic in here
 function generateDeleteOperationFromSelection(startPos, endPos) {
-  debugger;
+  // debugger;
   var charIDsToDelete = [];
   // look up all the char ids included in range between startPos and endPos
   //FIXME: remove some of these...?

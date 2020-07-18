@@ -505,6 +505,7 @@ function init(rowsContainerEl) {
       peerState,
     );
     renderPeerCarets(peerState);
+    renderPeerSelections(peerState);
   });
 }
 

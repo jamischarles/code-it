@@ -100,6 +100,7 @@ export function sendUpdate(operation) {
     for (var i = 0; i < operation.insertChars.length; i++) {
       var char = operation.insertChars[i];
       if (!char.insertAfter) delete char.insertAfter;
+      delete char.pos; // don't need to xfer this
     }
   }
 
@@ -180,10 +181,10 @@ document.addEventListener('DOMContentLoaded', function() {
       // STARTING ID at 'a' which is 10 (TEN) in base 10
       peers: {
         nextPeer: genNextPeerID('a'),
-        a: {
-          caretPos: {},
-          status: 'online',
-        },
+        // a: {
+        //   caretPos: {},
+        //   status: 'online',
+        // },
       },
       name: 'Anon', // timestamp: Date.now(),
       startedAt: firebase.database.ServerValue.TIMESTAMP,
@@ -273,10 +274,11 @@ function setMyPeerID() {
       PEER_ID = myPeerId;
       return Object.assign({}, currentData, {
         nextPeer: nextPeerId, // FIXME: this could be so much simpler if we used a NUMBER here... oh well...
-        [myPeerId]: {
-          caretPos: {},
-          status: 'online',
-        },
+        // We don't need to store the peer id under /peers...
+        // [myPeerId]: {
+        //   caretPos: {},
+        //   status: 'online',
+        // },
       });
 
       // return currentData;
@@ -444,9 +446,13 @@ function afterDbIsReady() {
 
     // if selection, get selection start/stop chars so we can send that to other peers...
     var {start, end} = getSelectionRangeBoundaries();
+    // console.log('#-2 SELECTION start', start);
+    // console.log('#-2 SELECTION end', end);
     if (start && end) {
-      var selStartChar = getCharAtPosition(start);
-      var selEndChar = getCharAtPosition(end);
+      var selStartChar = getCharAtPosition(start, true);
+      var selEndChar = getCharAtPosition(end, true);
+      // console.log('#-2.5 SELECTION selStartChar', selStartChar);
+      // console.log('#-2.5 SELECTION selEndChar', selEndChar);
     }
 
     // if there's no char, assume beginning of line... Grab the first live char, and store that...
