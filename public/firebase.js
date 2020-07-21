@@ -5,7 +5,8 @@ import {
   getOpQueue,
   flushOpQueue,
   updatePeerState,
-  updateOwnCaretPos,
+  saveOwnCaretPos,
+  saveOwnSelection,
   getFirstLiveChar,
   getState,
   getSelectionRangeBoundaries,
@@ -20,38 +21,6 @@ export var db;
 // That would also allow us to observe this value with a proxy if we needed to...
 let PEER_ID;
 export let SESSION_KEY;
-
-// FIXME: eventually make this an array... we could just split this for the lazy man... But just once...
-// const PEER_IDs_TO_ASSIGN = 'abcdefghijklmnopqrstuvwxyz';
-// If we don't want to store it like this, we can split the arr...
-// const PEER_IDs_TO_ASSIGN = [
-//   'a',
-//   'b',
-//   'c',
-//   'd',
-//   'e',
-//   'f',
-//   'g',
-//   'h',
-//   'i',
-//   'j',
-//   'k',
-//   'l',
-//   'm',
-//   'n',
-//   'o',
-//   'p',
-//   'q',
-//   'r',
-//   's',
-//   't',
-//   'u',
-//   'v',
-//   'w',
-//   'x',
-//   'y',
-//   'z',
-// ];
 
 // every second send the queue if anything is in it
 setInterval(sendOpQueue, 1000);
@@ -435,6 +404,7 @@ function afterDbIsReady() {
   //
   // FIXME: debounce this?
   document.addEventListener('selectionchange', e => {
+    // debugger;
     // console.log('selection changed!', document.getSelection());
     // TODO: debounce the execution of this...
     var rowEl = getActiveRowEl();
@@ -481,7 +451,8 @@ function afterDbIsReady() {
     if (!id) return;
 
     // save off self caret pos in state, so state.caret is never stale...
-    updateOwnCaretPos(id, start, end); // do we need start/end selection?
+    saveOwnCaretPos(id, start, end); // do we need start/end selection?
+    saveOwnSelection();
 
     // FIXME: should we store this on peers/caret instead? Will tihs mess with the online status? Shouldn't...
     // console.log('SESSION_KEY', SESSION_KEY);

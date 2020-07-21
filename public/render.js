@@ -10,7 +10,12 @@ import {
   getActiveRowEl,
 } from './prism_exp';
 import {getSelfPeerId} from './firebase';
-import {getCharById, getLiveCharFromDeadOne, getState} from './state';
+import {
+  getCharById,
+  getLiveCharFromDeadOne,
+  getState,
+  restoreOwnSelection,
+} from './state';
 //
 //
 //
@@ -229,6 +234,20 @@ export function getRowByIndex(i) {
   return rows.children[i];
 }
 
+export function renderOwnCaretOrSelection() {
+  var state = getState();
+  // console.log('state.selection', state.selection);
+
+  // if theres a selection  render that, else render caret
+  if (state.selection && state.selection.start) {
+    // console.log('RENDER OWN SELECTION');
+    renderOwnSelection();
+  } else {
+    // console.log('RENDER OWN CARET');
+    renderOwnCaret();
+  }
+}
+
 // render caret from state
 // get the char node and attach to that...?
 // that would be the simplest way to do it...?
@@ -265,6 +284,7 @@ export function renderOwnCaret() {
   var rowEl = getRowByIndex(pos.line);
   var charPos = pos.charPosition + 1;
 
+  // FIXME: is this even used?
   // if we need to render caret after a \n newline char, jump pos to next line.
   if (caretObj.afterChar && caretObj.afterChar.value === '\n') {
     rowEl = getRowByIndex(pos.line + 1);
@@ -275,6 +295,26 @@ export function renderOwnCaret() {
   }
 
   restoreCaretPos(rowEl, charPos);
+}
+
+// FIXME: just having this here to have a consistent API surface... it's not really helping
+export function renderOwnSelection() {
+  var state = getState();
+  if (!state.selection) return;
+
+  var {start, end} = state.selection;
+
+  // console.log('start', start);
+  // console.log('end', end);
+  // FIXME: try the naive approach first (use stored position on the char)
+  var range = getRangeFromStartAndEndPosition(start, end);
+
+  var selObj = window.getSelection();
+  selObj.addRange(range);
+
+  // must clear before adding a new range (since most browsers only allow 1 range selected at a time)
+  document.getSelection().removeAllRanges();
+  document.getSelection().addRange(range);
 }
 
 // we'll need to debounce this...

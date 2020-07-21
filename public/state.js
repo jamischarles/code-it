@@ -163,7 +163,7 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
   var ENTER = 13;
   var TAB = 9;
   var key = e.keyCode;
-  console.log('e', e);
+  // console.log('e', e);
   //
 
   // OPT IN
@@ -203,7 +203,7 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
       // handle REDO with cmd+Z
     } else if (e.key === 'z' && e.shiftKey === true) {
       let op = getRedoOp();
-      console.log('REDO: op', op);
+      // console.log('REDO: op', op);
       if (op) updateState(op, false, true);
       e.preventDefault();
     }
@@ -241,7 +241,7 @@ export function generateSimpleOperationFromKeystroke(e, pos) {
 // FIXME: move  to utils
 export function getSelectionRangeBoundaries() {
   var selObj = window.getSelection();
-  debugger;
+  // debugger;
   // var selRange = selObj.getRangeAt(0);
   // console.log('selObj', selObj);
   // console.log('selObj:1', selObj.anchorOffset);
@@ -497,7 +497,7 @@ function updateState(op, isRemoteOp, isUndoRedoOp) {
   // must be after state because it
   if (!isRemoteOp) {
     var lastCharInserted = charsToInsert[charsToInsert.length - 1];
-    caret = updateOwnCaretPos(
+    caret = saveOwnCaretPos(
       lastCharInserted || focusedItem || lastCharResurrected,
     );
   }
@@ -513,7 +513,7 @@ function updateState(op, isRemoteOp, isUndoRedoOp) {
   ) {
     // console.log('##4inside');
     // FIXME: flatten state.caret already
-    caret = updateOwnCaretPos(state.caret.afterChar);
+    caret = saveOwnCaretPos(state.caret.afterChar);
   }
 
   state = {
@@ -522,6 +522,7 @@ function updateState(op, isRemoteOp, isUndoRedoOp) {
     liveContent,
     peers: state.peers, // this is ONLY updated from updatePeers(). TODO: consider moving it to a separate state store entirely...
     caret: caret || state.caret, // new caret pos or old caret pos
+    selection: state.selection, // store current selection so it can be restored between render passes
   };
 
   // save the operation we just applied into the opqueue so we can send it to others...
@@ -553,7 +554,7 @@ function updateState(op, isRemoteOp, isUndoRedoOp) {
 
 //FIXME: use startSel, endSel to restore selection...
 //id can be string ID or char Obj
-export function updateOwnCaretPos(idOrObj, startSel, endSel) {
+export function saveOwnCaretPos(idOrObj, startSel, endSel) {
   // ONLY time idOrObj should be undefined is if after deletion, we are at very beginning of editor (0:0)
   var charObj = idOrObj;
 
@@ -577,8 +578,42 @@ export function updateOwnCaretPos(idOrObj, startSel, endSel) {
   // fire caret saved event here...
   // console.log('## own caret pos updated', state.caret);
   // returns new caret obj
+  // console.log('SAVED CARET POS: state.caret', state.caret);
   return state.caret;
 }
+
+// we need to store the charId for selStart,end becuase we can't use the range and the nodes because the dom gets wiped between render passes...
+// this is NOT used to send selection to peers (even though we could because we're using the same data)
+export function saveOwnSelection() {
+  var {start, end} = getSelectionRangeBoundaries();
+
+  // is there an active selection?
+  if (!start) {
+    delete state.selection;
+  }
+
+  state.selection = {
+    start,
+    end,
+  };
+
+  return state.selection;
+}
+
+// // restores the own selection stored in state
+// export function restoreOwnSelection() {
+//   var rangeToRestore = state.selection;
+//
+//
+//   // generate range from  2 char IDs
+//
+//   var selObj = window.getSelection();
+//
+//   if (rangeToRestore) {
+//     console.log('SELECTION: rangeToRestore', rangeToRestore);
+//     selObj.addRange(rangeToRestore);
+//   }
+// }
 
 // returns a live char if you pass a dead one (basically closest living sibling to the left)
 // useful to determine where the caret should be after a deletion etc...

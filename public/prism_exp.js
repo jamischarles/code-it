@@ -265,8 +265,8 @@ export function restoreCaretPos(rowEl, charPosition) {
 
   // range.setStart(node, 0);
   // range.setStart(el.childNodes[3], 10);
-  range.collapse(true);
-  sel.removeAllRanges();
+  range.collapse(true); // bring range down to a single point
+  sel.removeAllRanges(); // must remove ranges before adding a new one because browsers can only have 1 selection range
   sel.addRange(range);
 
   // todo try the setandextend...?

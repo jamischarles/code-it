@@ -15,7 +15,9 @@ import {
 import {
   renderToDom,
   writeHtmlStrFromState,
-  renderOwnCaret,
+  renderOwnCaretOrSelection,
+  // renderOwnCaret,
+  // renderOwnSelection,
   renderPeerCarets,
   renderPeerSelections,
 } from './render';
@@ -474,7 +476,10 @@ function init(rowsContainerEl) {
     // after render call renderOwnCaret()
     renderToDom(rowsContainerEl, writeHtmlStrFromState(getState()));
 
-    renderOwnCaret();
+    // restore caret and selection after a render pass
+    renderOwnCaretOrSelection();
+    // renderOwnCaret();
+    // renderOwnSelection();
 
     // 3 ways to do a render callback... (how does react do it?)
     // 1) mutation observer
